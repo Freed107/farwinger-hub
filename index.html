@@ -1115,5 +1115,35 @@ renderOverview();
 fetchShipStationOrders();
 fetchZohoOrders();
 </script>
+
+<script>
+// Override fetchZohoOrders to fix Zoho API status param issue
+const _origFetchZoho = fetchZohoOrders;
+window.fetchZohoOrders = async function() {
+  try {
+    const token = await getZohoToken();
+    const orgId = CONFIG.zoho.orgId || '20109215205';
+    const url = 'https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D';
+    const r = await proxyFetch(url, {
+      headers: { 'Authorization': 'Zoho-oauthtoken ' + token }
+    });
+    const data = await r.json();
+    if (data.code !== 0) throw new Error('Zoho error: ' + data.message);
+    return (data.invoices || []).map(inv => ({
+      id: 'ZOH-' + inv.invoice_number,
+      platform: 'Direct',
+      customer: inv.customer_name,
+      item: inv.line_items?.[0]?.name || inv.subject || 'Invoice',
+      amount: inv.total,
+      status: inv.status === 'paid' ? 'Shipped' : inv.status === 'sent' ? 'Pending' : inv.status,
+      date: inv.date,
+      dueDate: inv.due_date
+    }));
+  } catch(e) {
+    console.error('Zoho fetch error:', e);
+    return [];
+  }
+};
+</script>
 </body>
 </html>
