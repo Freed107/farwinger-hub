@@ -308,7 +308,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-right:16px;flex-shrink:0">
       <span id="live-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted)">â demo</span>
       <button onclick="fetchShipStationOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-amber);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Refresh</button>
-      <button onclick="fetchZohoOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
+      <button onclick="fetchZohoOrders().then(()=>{renderOverview();showBanner('Zoho refreshed','#2d6a4f');})" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
     </div>
   </div>
 
@@ -530,7 +530,7 @@ async function fetchZohoOrders() {
 
     // Fetch invoices and estimates (quotes) in parallel
     const [invResp, estResp] = await Promise.all([
-      fetch(`${base}/invoices?status=open&per_page=100`, { headers }),
+      fetch(`${base}/invoices?per_page=200&sort_column=date&sort_order=D`, { headers }),
       fetch(`${base}/estimates?status=sent&per_page=100`, { headers })
     ]);
 
@@ -1116,34 +1116,5 @@ fetchShipStationOrders();
 fetchZohoOrders();
 </script>
 
-<script>
-// Override fetchZohoOrders to fix Zoho API status param issue
-const _origFetchZoho = fetchZohoOrders;
-window.fetchZohoOrders = async function() {
-  try {
-    const token = await getZohoToken();
-    const orgId = CONFIG.zoho.orgId || '20109215205';
-    const url = 'https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D';
-    const r = await proxyFetch(url, {
-      headers: { 'Authorization': 'Zoho-oauthtoken ' + token }
-    });
-    const data = await r.json();
-    if (data.code !== 0) throw new Error('Zoho error: ' + data.message);
-    return (data.invoices || []).map(inv => ({
-      id: 'ZOH-' + inv.invoice_number,
-      platform: 'Direct',
-      customer: inv.customer_name,
-      item: inv.line_items?.[0]?.name || inv.subject || 'Invoice',
-      amount: inv.total,
-      status: inv.status === 'paid' ? 'Shipped' : inv.status === 'sent' ? 'Pending' : inv.status,
-      date: inv.date,
-      dueDate: inv.due_date
-    }));
-  } catch(e) {
-    console.error('Zoho fetch error:', e);
-    return [];
-  }
-};
-</script>
 </body>
 </html>
