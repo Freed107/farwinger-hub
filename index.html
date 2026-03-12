@@ -308,7 +308,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-right:16px;flex-shrink:0">
       <span id="live-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted)">â demo</span>
       <button onclick="fetchShipStationOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-amber);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Refresh</button>
-      <button onclick="(async()=>{try{const z=await fetchZohoOrders();const ss=await fetchShipStationOrders();const merged=[...( ss||[]),...z];window.__allOrders=merged;renderOverview(merged);renderActivityFeed(merged);renderOrdersTable(merged);renderProduction(merged);renderFulfilment(merged);showBanner('Loaded '+z.length+' Zoho + '+(ss?ss.length:0)+' ShipStation orders','success');}catch(e){showBanner('Zoho refresh failed: '+e.message,'error');}})()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
+      <button onclick="(async()=>{try{showBanner('Loading Zoho invoices...','info');const z=await fetchZohoOrders();const ss=await fetchShipStationOrders();const merged=[...(ss||[]),...z];renderOverview(merged);renderActivityFeed(merged);renderOrdersTable(merged);renderProduction(merged);renderFulfilment(merged);showBanner('Zoho: '+z.length+' invoices loaded','success');}catch(ex){showBanner('Zoho error: '+ex.message,'error');}})()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
     </div>
   </div>
 
@@ -522,8 +522,9 @@ async function fetchZohoOrders() {
   try {
     const token = await getZohoToken();
     const orgId = CONFIG.zoho.orgId || '20109215205';
-    const url = 'https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D';
-    const r = await proxyFetch(url, { headers: { 'Authorization': 'Zoho-oauthtoken ' + token } });
+    const r = await proxyFetch('https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D', {
+      headers: { 'Authorization': 'Zoho-oauthtoken ' + token }
+    });
     const data = await r.json();
     if (data.code !== 0) throw new Error(data.message);
     return (data.invoices || []).map(inv => ({
@@ -539,7 +540,6 @@ async function fetchZohoOrders() {
     }));
   } catch(e) {
     console.error('Zoho fetch error:', e);
-    showBanner('Zoho error: ' + e.message, 'error');
     return [];
   }
 }
