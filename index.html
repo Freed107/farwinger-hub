@@ -308,7 +308,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-right:16px;flex-shrink:0">
       <span id="live-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted)">â demo</span>
       <button onclick="fetchShipStationOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-amber);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Refresh</button>
-      <button onclick="fetchZohoOrders().then(()=>{renderOverview();showBanner('Zoho refreshed','#2d6a4f');})" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
+      <button onclick="(async()=>{try{const z=await fetchZohoOrders();const ss=await fetchShipStationOrders();const merged=[...( ss||[]),...z];window.__allOrders=merged;renderOverview(merged);renderActivityFeed(merged);renderOrdersTable(merged);renderProduction(merged);renderFulfilment(merged);showBanner('Loaded '+z.length+' Zoho + '+(ss?ss.length:0)+' ShipStation orders','success');}catch(e){showBanner('Zoho refresh failed: '+e.message,'error');}})()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">â³ Zoho</button>
     </div>
   </div>
 
@@ -521,140 +521,29 @@ function mapZohoDoc(doc, type) {
 async function fetchZohoOrders() {
   try {
     const token = await getZohoToken();
-    const orgId = await getZohoOrgId(token);
-    const headers = {
-      'Authorization': 'Zoho-oauthtoken ' + token,
-      ...(orgId ? { 'X-com-zoho-invoice-organizationid': orgId } : {})
-    };
-    const base = CONFIG.zoho.apiDomain;
-
-    // Fetch invoices and estimates (quotes) in parallel
-    const [invResp, estResp] = await Promise.all([
-      fetch(`${base}/invoices?per_page=200&sort_column=date&sort_order=D`, { headers }),
-      fetch(`${base}/estimates?status=sent&per_page=100`, { headers })
-    ]);
-
-    const invData = await invResp.json();
-    const estData = await estResp.json();
-
-    const invoices = (invData.invoices || []).map(d => mapZohoDoc(d, 'invoice'));
-    const estimates = (estData.estimates || []).map(d => mapZohoDoc(d, 'quote'));
-    const zohoOrders = [...invoices, ...estimates];
-
-    // Replace demo direct orders with live Zoho data
-    const nonDirect = ORDERS.filter(o => o.platform !== 'direct');
-    ORDERS.length = 0;
-    nonDirect.forEach(o => ORDERS.push(o));
-    zohoOrders.forEach(o => ORDERS.push(o));
-
-    renderAll();
-    const count = zohoOrders.length;
-    showBanner(`â Loaded ${count} Zoho direct order${count !== 1 ? 's' : ''} (${invoices.length} invoice${invoices.length !== 1 ? 's' : ''}, ${estimates.length} quote${estimates.length !== 1 ? 's' : ''})`, 'success');
-    return zohoOrders;
-  } catch(err) {
-    console.error('Zoho fetch error:', err);
-    showBanner(`â  Zoho connection failed: ${err.message}`, 'error');
+    const orgId = CONFIG.zoho.orgId || '20109215205';
+    const url = 'https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D';
+    const r = await proxyFetch(url, { headers: { 'Authorization': 'Zoho-oauthtoken ' + token } });
+    const data = await r.json();
+    if (data.code !== 0) throw new Error(data.message);
+    return (data.invoices || []).map(inv => ({
+      id: 'ZOH-' + inv.invoice_number,
+      platform: 'Direct',
+      customer: inv.customer_name,
+      item: (inv.line_items && inv.line_items[0]) ? inv.line_items[0].name : (inv.subject || 'Invoice'),
+      amount: inv.total,
+      status: inv.status === 'paid' ? 'Shipped' : 'Pending',
+      date: inv.date,
+      dueDate: inv.due_date,
+      currency: 'GBP'
+    }));
+  } catch(e) {
+    console.error('Zoho fetch error:', e);
+    showBanner('Zoho error: ' + e.message, 'error');
     return [];
   }
 }
 
-// ââ State ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-let liveOrdersLoaded = false;
-let loadingLive = false;
-
-// ââ ShipStation order mapper âââââââââââââââââââââââââââââââââââââ
-function mapSSOrder(o) {
-  const store = (o.advancedOptions?.storeId || '');
-  // Detect platform from store name / tag
-  let platform = 'shopify'; // ShipStation is Shopify-connected by default
-  const tags = (o.tagIds || []);
-  const storeName = (o.orderSource || '').toLowerCase();
-  if (storeName.includes('etsy')) platform = 'etsy';
-  else if (storeName.includes('ebay')) platform = 'ebay';
-  else if (storeName.includes('amazon')) platform = 'amazon';
-
-  const item = o.items && o.items.length > 0
-    ? o.items.map(i => i.name).join(', ')
-    : 'Unknown item';
-
-  const dueDate = o.shipByDate
-    ? o.shipByDate.split('T')[0]
-    : new Date(new Date(o.orderDate).getTime() + 21*86400000).toISOString().split('T')[0];
-
-  let status = 'pending';
-  if (o.orderStatus === 'shipped') status = 'shipped';
-  else if (o.orderStatus === 'delivered') status = 'delivered';
-  else if (o.orderStatus === 'cancelled') status = 'cancelled';
-  else if (o.orderStatus === 'on_hold') status = 'on_hold';
-
-  const addr = o.shipTo || {};
-  const countryCode = addr.country || '';
-  const flagMap = {GB:'ð¬ð§',US:'ðºð¸',DE:'ð©ðª',FR:'ð«ð·',NL:'ð³ð±',AU:'ð¦ðº',CA:'ð¨ð¦',PL:'ðµð±',IT:'ð®ð¹',ES:'ðªð¸',SE:'ð¸ðª',DK:'ð©ð°',NO:'ð³ð´',BE:'ð§ðª',CH:'ð¨ð­',AT:'ð¦ð¹',JP:'ð¯ðµ',CN:'ð¨ð³'};
-  const flag = flagMap[countryCode] || 'ð';
-
-  return {
-    id: platform.toUpperCase().slice(0,3) + '-' + o.orderNumber,
-    _ssId: o.orderId,
-    platform,
-    customer: o.shipTo ? `${o.shipTo.name || ''}`.trim() : 'Unknown',
-    item,
-    date: o.orderDate ? o.orderDate.split('T')[0] : '',
-    due: dueDate,
-    amount: parseFloat(o.orderTotal || 0),
-    status,
-    country: flag,
-    phone: !!(addr.phone),
-    email: !!(o.customerEmail),
-    address: !!(addr.street1 && addr.city && addr.postalCode),
-    _raw: o
-  };
-}
-
-// ââ Fetch live orders from ShipStation ââââââââââââââââââââââââââ
-async function fetchShipStationOrders() {
-  if (loadingLive) return;
-  loadingLive = true;
-  showBanner('â³ Loading live orders from ShipStationâ¦', 'info');
-  try {
-    // Fetch last 100 awaiting shipment + shipped (last 30 days)
-    const params = new URLSearchParams({
-      orderStatus: 'awaiting_shipment',
-      pageSize: 100,
-      page: 1,
-      sortBy: 'OrderDate',
-      sortDir: 'DESC'
-    });
-    const resp = await proxyFetch(`${CONFIG.shipstation.baseUrl}/orders?${params}`, {
-      headers: {
-        'Authorization': `Basic ${CONFIG.shipstation.authToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (!resp.ok) throw new Error(`ShipStation API error: ${resp.status} ${resp.statusText}`);
-    const data = await resp.json();
-    const liveOrders = (data.orders || []).map(mapSSOrder);
-
-    // Merge: replace demo shopify/etsy/ebay/amazon orders with live data
-    const demoDirectOrders = ORDERS.filter(o => o.platform === 'direct');
-    ORDERS.length = 0;
-    liveOrders.forEach(o => ORDERS.push(o));
-    demoDirectOrders.forEach(o => ORDERS.push(o));
-
-    liveOrdersLoaded = true;
-    loadingLive = false;
-    const statusEl = document.getElementById('live-status');
-    if (statusEl) { statusEl.textContent = 'â live · ' + liveOrders.length; statusEl.style.color = '#7ad47a'; }
-    showBanner(`â Loaded ${liveOrders.length} live orders from ShipStation`, 'success');
-    setTimeout(hideBanner, 4000);
-    renderAll();
-  } catch(err) {
-    loadingLive = false;
-    showBanner(`â  ShipStation connection failed: ${err.message}`, 'error');
-    console.error('ShipStation fetch error:', err);
-  }
-}
-
-// ââ Banner helpers âââââââââââââââââââââââââââââââââââââââââââââââ
 function showBanner(msg, type) {
   let b = document.getElementById('live-banner');
   if (!b) {
