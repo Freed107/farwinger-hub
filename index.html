@@ -1128,30 +1128,27 @@ async function refreshZohoOrders() {
     const data = await r.json();
     if (data.code !== 0) throw new Error(data.message);
     const invoices = data.invoices || [];
-    // Remove any existing Direct/Zoho orders
     for (let i = ORDERS.length - 1; i >= 0; i--) {
       if (ORDERS[i].platform === 'Direct') ORDERS.splice(i, 1);
     }
-    // Add Zoho invoices
     invoices.forEach(inv => {
       ORDERS.push({
         id: 'ZOH-' + inv.invoice_number,
         platform: 'Direct',
         customer: inv.customer_name,
-        item: (inv.line_items && inv.line_items[0]) ? inv.line_items[0].name : (inv.subject || 'Invoice'),
+        item: (inv.line_items && inv.line_items[0]) ? inv.line_items[0].name : 'Invoice',
         amount: parseFloat(inv.total) || 0,
         status: inv.status === 'paid' ? 'Shipped' : 'Pending',
-        date: inv.date,
-        dueDate: inv.due_date,
-        urgency: 'green'
+        date: inv.date, dueDate: inv.due_date, urgency: 'green'
       });
     });
     renderOverview();
     renderActivityFeed(ORDERS);
     renderOrdersTable();
     updateBadges();
-    showBanner('✅ ' + invoices.length + ' Zoho invoices loaded — total ' + ORDERS.length + ' orders', 'success');
-    setTimeout(hideBanner, 4000);
+    hideBanner();
+    showBanner('✅ ' + invoices.length + ' Zoho + ' + ORDERS.filter(o=>o.platform!=='Direct').length + ' ShipStation — total ' + ORDERS.length + ' orders', 'success');
+    setTimeout(hideBanner, 5000);
   } catch(e) {
     showBanner('❌ Zoho: ' + e.message, 'error');
   }
