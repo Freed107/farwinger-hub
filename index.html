@@ -1116,5 +1116,59 @@ fetchShipStationOrders();
 fetchZohoOrders();
 </script>
 
+
+<script>
+async function refreshZohoOrders() {
+  showBanner('⏳ Loading Zoho invoices…', 'info');
+  try {
+    const token = await getZohoToken();
+    const orgId = CONFIG.zoho.orgId || '20109215205';
+    const url = 'https://www.zohoapis.eu/invoice/v3/invoices?organization_id=' + orgId + '&per_page=200&sort_column=date&sort_order=D';
+    const r = await proxyFetch(url, { headers: { 'Authorization': 'Zoho-oauthtoken ' + token } });
+    const data = await r.json();
+    if (data.code !== 0) throw new Error(data.message);
+    
+    const invoices = data.invoices || [];
+    // Remove existing Zoho/Direct orders from ORDERS
+    ORDERS.length = 0;
+    // Re-add all non-Zoho orders (ShipStation ones)
+    // Re-fetch SS first, then add Zoho on top
+    const ssOrders = await (async () => {
+      const p = new URLSearchParams({ orderStatus:'awaiting_shipment,shipped', pageSize:100, sortBy:'orderDate', sortDir:'DESC' });
+      const r2 = await proxyFetch('https://ssapi.shipstation.com/orders?' + p, {
+        headers: { 'Authorization': 'Basic ' + btoa(CONFIG.shipStation.key + ':' + CONFIG.shipStation.secret) }
+      });
+      const d2 = await r2.json();
+      return (d2.orders || []).map(mapSSOrder);
+    })();
+    
+    ssOrders.forEach(o => ORDERS.push(o));
+    
+    // Map and add Zoho invoices as Direct orders
+    invoices.forEach(inv => {
+      ORDERS.push({
+        id: 'ZOH-' + inv.invoice_number,
+        platform: 'Direct',
+        customer: inv.customer_name,
+        item: (inv.line_items && inv.line_items[0]) ? inv.line_items[0].name : (inv.subject || 'Invoice'),
+        amount: parseFloat(inv.total) || 0,
+        status: inv.status === 'paid' ? 'Shipped' : inv.status === 'sent' ? 'Pending' : 'Pending',
+        date: inv.date,
+        dueDate: inv.due_date,
+        urgency: 'green'
+      });
+    });
+
+    renderOverview();
+    renderActivityFeed();
+    renderOrdersTable();
+    updateBadges();
+    showBanner('✅ Loaded ' + ssOrders.length + ' ShipStation + ' + invoices.length + ' Zoho invoices', 'success');
+    setTimeout(hideBanner, 4000);
+  } catch(e) {
+    showBanner('❌ Zoho error: ' + e.message, 'error');
+  }
+}
+</script>
 </body>
 </html>
