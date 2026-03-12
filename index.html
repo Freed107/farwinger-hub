@@ -1147,7 +1147,7 @@ async function refreshZohoOrders() {
       });
     });
     renderOverview();
-    renderActivityFeed();
+    renderActivityFeed(ORDERS);
     renderOrdersTable();
     updateBadges();
     showBanner('✅ ' + invoices.length + ' Zoho invoices loaded — total ' + ORDERS.length + ' orders', 'success');
