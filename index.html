@@ -679,12 +679,14 @@ async function callClaudeWithGmail(userPrompt, systemPrompt, maxTokens) {
     messages: [{ role: 'user', content: userPrompt }],
     mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
   };
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const _anthUrl = `https://farwinger-proxy.fredwalkers.workers.dev/?url=${encodeURIComponent('https://api.anthropic.com/v1/messages')}`;
+  const resp = await fetch(_anthUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
       'anthropic-beta': 'mcp-client-2025-04-04'
     },
     body: JSON.stringify(body)
@@ -1820,9 +1822,10 @@ async function generateAIReply(msg, linkedOrder) {
     const priorityNote = msg.priority === 'high' ? 'This appears to be an urgent or complaint email — respond with extra care and reassurance.' : '';
     const apiKey = getAnthropicKey();
     if (!apiKey) return 'Thank you for your message! We\'ll get back to you within 1 business day. — The Farwinger Team';
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const _anthUrl2 = `https://farwinger-proxy.fredwalkers.workers.dev/?url=${encodeURIComponent('https://api.anthropic.com/v1/messages')}`;
+    const resp = await fetch(_anthUrl2, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 400,
