@@ -518,14 +518,30 @@ function requireApiKey(cb) {
   return null;
 }
 function saveApiKeyFromModal() {
+  // Save Gmail Worker config
+  const workerUrl = document.getElementById('gmail-worker-url');
+  const workerSecret = document.getElementById('gmail-worker-secret');
+  if (workerUrl && workerUrl.value.trim()) localStorage.setItem('farwinger_gmail_worker', workerUrl.value.trim());
+  if (workerSecret && workerSecret.value.trim()) localStorage.setItem('farwinger_gmail_secret', workerSecret.value.trim());
+
+  // Save Anthropic key (optional)
   const inp = document.getElementById('apikey-input');
   const key = inp ? inp.value.trim() : '';
-  if (!key || !key.startsWith('sk-ant-')) { showBanner('⚠ Key should start with sk-ant-', 'error'); return; }
-  setAnthropicKey(key);
+  if (key && key.startsWith('sk-ant-')) {
+    setAnthropicKey(key);
+    const btn = document.getElementById('apikey-btn-label');
+    if (btn) btn.textContent = '✓ Key Set';
+  }
+
   document.getElementById('apikey-modal').style.display = 'none';
-  const btn = document.getElementById('apikey-btn-label');
-  if (btn) btn.textContent = '✓ Key Set';
-  showBanner('✓ API key saved — loading inbox…', 'success'); setTimeout(hideBanner, 3000);
+
+  const hasWorkerSecret = !!(workerSecret && workerSecret.value.trim());
+  const saved = hasWorkerSecret ? '✓ Config saved — loading inbox…' : '✓ Config saved';
+  showBanner(saved, 'success'); setTimeout(hideBanner, 3000);
+
+  if (hasWorkerSecret) {
+    setTimeout(() => fetchGmailMessages(), 500);
+  }
   if (window._apikeyCallback) { const fn = window._apikeyCallback; window._apikeyCallback = null; fn(key); }
 }
 const CONFIG = {
@@ -679,14 +695,12 @@ async function callClaudeWithGmail(userPrompt, systemPrompt, maxTokens) {
     messages: [{ role: 'user', content: userPrompt }],
     mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
   };
-  const _anthUrl = `https://farwinger-proxy.fredwalkers.workers.dev/?url=${encodeURIComponent('https://api.anthropic.com/v1/messages')}`;
-  const resp = await fetch(_anthUrl, {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
       'anthropic-beta': 'mcp-client-2025-04-04'
     },
     body: JSON.stringify(body)
@@ -702,79 +716,53 @@ function extractTextFromResponse(data) {
 }
 
 // Fetch emails from Gmail via Claude MCP — returns structured array
+// ─── Gmail Worker Integration ────────────────────────────────────────────────
+// Calls the farwinger-gmail Cloudflare Worker instead of Claude MCP
+// Worker URL and secret are stored in localStorage for easy updating
+
+function getGmailWorkerUrl() {
+  return localStorage.getItem('farwinger_gmail_worker') || 'https://farwinger-gmail.fredwalkers.workers.dev';
+}
+function getGmailWorkerSecret() {
+  return localStorage.getItem('farwinger_gmail_secret') || '';
+}
+function setGmailWorkerConfig(url, secret) {
+  if (url) localStorage.setItem('farwinger_gmail_worker', url);
+  if (secret) localStorage.setItem('farwinger_gmail_secret', secret);
+}
+
+async function gmailWorkerFetch(path, options = {}) {
+  const url = getGmailWorkerUrl() + path;
+  const secret = getGmailWorkerSecret();
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Worker-Secret': secret,
+      ...(options.headers || {})
+    }
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `Worker error ${resp.status}`);
+  return data;
+}
+
 async function fetchGmailMessages() {
   if (gmailLoading) return;
   gmailLoading = true;
-  showBanner('⟳ Loading Gmail inbox via Claude AI…', 'info');
+  showBanner('⏳ Loading Gmail inbox…', 'info');
 
   try {
-    const data = await callClaudeWithGmail(
-      `Search Gmail inbox of administrator@farwinger.com. Get the 25 most recent customer-relevant messages.
+    const data = await gmailWorkerFetch('/inbox');
+    const parsed = data.messages || [];
 
-INCLUDE:
-- Direct customer emails (to contact@, administrator@, info@farwinger.com)
-- Etsy conversation messages (from conversations@mail.etsy.com or no-reply@account.etsy.com)
-- eBay buyer messages (from ebay@ebay.com)
-- New Etsy/eBay sale notifications (useful for order numbers)
-- eBay dispatch reminders
-
-EXCLUDE:
-- Marketing/newsletters (PageFly, eBay Seller News, Google Merchant reports)
-- Automated ShipStation/shipment tracking emails
-- Invoices sent FROM Farwinger to customers
-- Anthropic/Stripe/bank notifications
-- FedEx/carrier tracking updates
-- Lumber/supplier emails
-
-For each email return these fields as a JSON array:
-- id: Gmail message ID
-- threadId: Gmail thread ID
-- from: sender display name
-- fromEmail: raw sender email
-- subject: subject line
-- snippet: first 150 chars of plain text body
-- date: ISO 8601 datetime
-- platform: etsy/ebay/shopify/amazon/direct
-- unread: boolean
-- orderRef: order number from subject/body (e.g. "#1003SF", "3998719139") or null
-- tags: array from [delivery-query, custom-order, returns, complaint, shipping, bespoke-enquiry, dispatch-reminder, sale-notification]
-- priority: "high" if complaint or urgent delivery issue, else "normal"
-
-Return ONLY a raw JSON array. No markdown. No explanation.`,
-      'You are a Gmail data extraction assistant for Farwinger. Return ONLY a raw JSON array with no markdown or explanation.',
-      1500
-    );
-
-    const raw = extractTextFromResponse(data);
-    let parsed = [];
-    try {
-      // Strip any accidental markdown
-      const clean = raw.replace(/```json|```/g, '').trim();
-      parsed = JSON.parse(clean);
-      if (!Array.isArray(parsed)) parsed = [];
-    } catch(e) {
-      console.warn('Gmail parse error:', e, raw.substring(0, 200));
-      parsed = [];
-    }
-
-    // Enrich with display fields
     gmailMessages = parsed.map(m => ({
       ...m,
       timeDisplay: formatGmailDate(m.date),
-      platform: m.platform || 'direct',
       tags: m.tags || [],
       unread: !!m.unread,
       priority: m.priority || 'normal'
     }));
-
-    // Sort: high priority first, then unread, then by date desc
-    gmailMessages.sort((a, b) => {
-      if (a.priority === 'high' && b.priority !== 'high') return -1;
-      if (b.priority === 'high' && a.priority !== 'high') return 1;
-      if (a.unread && !b.unread) return -1;
-      if (!a.unread && b.unread) return 1;
-      return new Date(b.date) - new Date(a.date);
-    });
 
     renderCS();
     const unreadCount = gmailMessages.filter(m => m.unread).length;
@@ -785,69 +773,47 @@ Return ONLY a raw JSON array. No markdown. No explanation.`,
     showBanner(msg, 'success');
     setTimeout(hideBanner, 5000);
 
-    // Update status indicator
     const dot = document.getElementById('gmail-dot');
     const txt = document.getElementById('gmail-status-text');
     if (dot) dot.style.background = highPriority > 0 ? 'var(--fw-amber)' : 'var(--fw-blue)';
     if (txt) txt.textContent = `Gmail live · ${gmailMessages.length} msgs`;
 
-    // Update inbox badge
     const badge = document.getElementById('inboxBadge');
     if (badge) badge.textContent = unreadCount || gmailMessages.length;
 
   } catch(err) {
     console.error('Gmail fetch error:', err);
-    showBanner('⚠ Gmail load failed — check console', 'error');
+    const isNoSecret = !getGmailWorkerSecret();
+    showBanner(
+      isNoSecret
+        ? '⚠ Gmail worker secret not set — click "API Key" button to configure'
+        : `⚠ Gmail load failed: ${err.message}`,
+      'error'
+    );
   }
   gmailLoading = false;
 }
 
-// Fetch a specific email thread for display
 async function fetchGmailThread(messageId, threadId, fromName, subject) {
-  showBanner('⟳ Loading conversation…', 'info');
+  showBanner('⏳ Loading conversation…', 'info');
   try {
-    const data = await callClaudeWithGmail(
-      `Retrieve Gmail thread ID "${threadId}" from administrator@farwinger.com's Gmail. 
-Return the conversation messages as a JSON array with fields: role ("customer" or "farwinger"), text (plain text body, max 500 chars), date (ISO).
-Extract only the human-readable message text — skip email headers, signatures, Etsy boilerplate, and HTML.
-Return ONLY a raw JSON array. No markdown. No explanation.`,
-      'You are a Gmail reader. Return only raw JSON arrays.',
-      800
-    );
-    const raw = extractTextFromResponse(data);
-    const clean = raw.replace(/```json|```/g, '').trim();
-    let messages = [];
-    try { messages = JSON.parse(clean); } catch(e) {}
-    return Array.isArray(messages) ? messages : [];
+    const data = await gmailWorkerFetch(`/thread?id=${encodeURIComponent(threadId)}`);
+    return data.messages || [];
   } catch(err) {
     console.error('Thread fetch error:', err);
     return [];
   }
 }
 
-// Send a reply via Gmail MCP
 async function sendGmailReplyViaMCP(threadId, to, subject, body) {
-  showBanner('⟳ Sending reply via Gmail…', 'info');
+  showBanner('⏳ Creating draft reply…', 'info');
   try {
-    const data = await callClaudeWithGmail(
-      `Create a draft reply in Gmail (administrator@farwinger.com) to thread ID "${threadId}".
-The reply should be sent to: ${to}
-Subject line should be: Re: ${subject.replace(/^Re:\s*/i, '')}
-Body of the reply:
-${body}
-
-Create this as a Gmail draft using the gmail_create_draft tool. Return "DRAFT_CREATED" if successful.`,
-      'You are a Gmail assistant. Create email drafts as instructed.',
-      400
-    );
-    const result = extractTextFromResponse(data);
-    if (result.includes('DRAFT_CREATED') || result.toLowerCase().includes('draft')) {
-      showBanner('✓ Draft created in Gmail — check your Drafts to review & send', 'success');
-      return true;
-    } else {
-      showBanner('✓ Reply drafted (check Gmail Drafts folder)', 'success');
-      return true;
-    }
+    await gmailWorkerFetch('/draft', {
+      method: 'POST',
+      body: JSON.stringify({ threadId, to, subject, replyBody: body })
+    });
+    showBanner('✓ Draft created in Gmail — check your Drafts to review & send', 'success');
+    return true;
   } catch(err) {
     showBanner('⚠ Reply failed: ' + err.message, 'error');
     return false;
@@ -856,13 +822,7 @@ Create this as a Gmail draft using the gmail_create_draft tool. Return "DRAFT_CR
 
 // Legacy aliases
 function connectGoogle() {
-  if (!getAnthropicKey()) {
-    openApiKeyModal();
-    window._apikeyCallback = () => { fetchGmailMessages(); setTimeout(() => loadCalendarViaMCP(), 2000); };
-    return;
-  }
   fetchGmailMessages();
-  setTimeout(() => loadCalendarViaMCP(), 2000);
 }
 function connectGmail() { fetchGmailMessages(); }
 function saveGoogleClientId() { showBanner('ℹ Gmail connects automatically via Claude AI — no setup needed', 'info'); }
@@ -873,6 +833,10 @@ function openApiKeyModal() {
   const existing = getAnthropicKey();
   const inp = document.getElementById('apikey-input');
   if (inp && existing) inp.value = existing;
+  const wu = document.getElementById('gmail-worker-url');
+  const ws = document.getElementById('gmail-worker-secret');
+  if (wu) wu.value = localStorage.getItem('farwinger_gmail_worker') || '';
+  if (ws) ws.value = localStorage.getItem('farwinger_gmail_secret') || '';
   modal.style.display = 'flex';
 }
 function clearApiKey() {
@@ -1822,10 +1786,9 @@ async function generateAIReply(msg, linkedOrder) {
     const priorityNote = msg.priority === 'high' ? 'This appears to be an urgent or complaint email — respond with extra care and reassurance.' : '';
     const apiKey = getAnthropicKey();
     if (!apiKey) return 'Thank you for your message! We\'ll get back to you within 1 business day. — The Farwinger Team';
-    const _anthUrl2 = `https://farwinger-proxy.fredwalkers.workers.dev/?url=${encodeURIComponent('https://api.anthropic.com/v1/messages')}`;
-    const resp = await fetch(_anthUrl2, {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 400,
@@ -1925,10 +1888,16 @@ fetchZohoOrders();
       <button onclick="document.getElementById('apikey-modal').style.display='none'" style="background:none;border:none;color:#6b6355;cursor:pointer;font-size:20px;line-height:1">×</button>
     </div>
     <div style="font-size:12px;color:#8a7f6e;line-height:1.6;margin-bottom:14px">
-      Required for Gmail, AI replies, Calendar and Drive KB.<br>
+      Optional: Anthropic key for AI reply suggestions.<br>
       Your key is stored <strong>locally in your browser only</strong> — never sent to any Farwinger server.<br>
       Get yours at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#5a90ae">console.anthropic.com</a>
     </div>
+    <div style="font-size:12px;color:#8a7f6e;margin-bottom:8px;margin-top:14px"><strong style="color:#5a90ae">📬 Gmail Worker Config</strong><br>Enter the Worker URL and secret from your Cloudflare farwinger-gmail Worker.</div>
+    <input id="gmail-worker-url" type="text" placeholder="https://farwinger-gmail.fredwalkers.workers.dev" autocomplete="off"
+      style="width:100%;background:#2a2418;border:1px solid rgba(74,127,158,.25);border-radius:8px;padding:8px 14px;font-size:11px;color:#e8e0d0;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:8px">
+    <input id="gmail-worker-secret" type="password" placeholder="Worker secret (WORKER_SECRET env var)" autocomplete="off"
+      style="width:100%;background:#2a2418;border:1px solid rgba(74,127,158,.25);border-radius:8px;padding:8px 14px;font-size:11px;color:#e8e0d0;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:14px">
+    <div style="font-size:12px;color:#8a7f6e;margin-bottom:6px">Anthropic key (for AI reply suggestions — optional)</div>
     <input id="apikey-input" type="password" placeholder="sk-ant-api03-…" autocomplete="off"
       style="width:100%;background:#2a2418;border:1px solid rgba(212,134,26,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#e8e0d0;font-family:'DM Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:12px"
       onkeydown="if(event.key==='Enter')saveApiKeyFromModal()">
