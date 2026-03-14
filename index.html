@@ -705,7 +705,8 @@ async function callClaudeWithGmail(userPrompt, systemPrompt, maxTokens) {
     },
     body: JSON.stringify(body)
   });
-  const data = await resp.json();
+  let data;
+  try { data = await resp.json(); } catch(e) { throw new Error('API response not JSON: ' + (await resp.text().catch(()=>'unreadable'))); }
   if (data.error) { console.error('Claude API error:', data.error); throw new Error(data.error.message); }
   return data;
 }
@@ -1049,8 +1050,10 @@ function hideBanner() {
 }
 function renderAll() {
   renderOverview();
-  if (document.getElementById('tab-production').classList.contains('active')) renderProduction();
-  if (document.getElementById('tab-fulfilment').classList.contains('active')) renderFulfilment();
+  const vp = document.getElementById('view-production');
+  if (vp && vp.classList.contains('active')) renderProduction();
+  const vf = document.getElementById('view-fulfilment');
+  if (vf && vf.classList.contains('active')) renderFulfilment();
 }
 function urgencyClass(d){const n=daysFrom(d);if(n<0)return'black';if(n<5)return'red';if(n<10)return'amber';return'green';}
 function urgencyLabel(d){const n=daysFrom(d);if(n<0)return Math.abs(n)+'d overdue';return n+'d left';}
@@ -1468,6 +1471,7 @@ function refreshCalendar() {
 }
 
 async function loadCalendarViaMCP() {
+  if (!getAnthropicKey()) return; // only run if API key is set
   const panel = document.getElementById('calendarPanel');
   if (!panel) return;
   panel.innerHTML = '<div style="padding:14px;font-size:11px;color:var(--text-muted)">⟳ Loading calendar…</div>';
@@ -1555,6 +1559,7 @@ let driveKBFiles = [];
 let allFaqItems = [...(typeof FAQ_DATA !== 'undefined' ? FAQ_DATA : [])];
 
 async function loadDriveKB() {
+  if (!getAnthropicKey()) return; // only run if API key is set
   const folderInput = document.getElementById('drive-folder-input');
   const folderId = folderInput ? folderInput.value.trim() : '';
   if (folderId) localStorage.setItem('farwinger_drive_folder', folderId);
