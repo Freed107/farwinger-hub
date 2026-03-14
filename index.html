@@ -338,7 +338,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
       </div>
       <div class="charts-row">
         <div class="chart-card">
-          <div class="chart-title">Revenue by Platform</div>
+          <div class="chart-title" id="platform-chart-title">Revenue by Platform</div>
           <div class="chart-area" id="platformChart"></div>
         </div>
         <div class="chart-card">
@@ -1178,6 +1178,21 @@ function renderOverview(){
 }
 
 function renderPlatformChart(orders){
+  // Update chart title with date range
+  var titleEl = document.getElementById('platform-chart-title');
+  if (titleEl && orders.length) {
+    var dates = orders.map(function(o){return o.date;}).filter(Boolean).sort();
+    var from = dates[0], to = dates[dates.length-1];
+    function fmtD(d) {
+      if (!d) return '';
+      var parts = d.split('-');
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return parts[2].replace(/^0/,'') + ' ' + months[parseInt(parts[1])-1];
+    }
+    titleEl.textContent = from === to
+      ? 'Revenue by Platform · ' + fmtD(from)
+      : 'Revenue by Platform · ' + fmtD(from) + '–' + fmtD(to);
+  }
   var ALL=['etsy','ebay','shopify','amazon','tiktok','direct'];
   var totals={etsy:0,ebay:0,shopify:0,amazon:0,tiktok:0,direct:0};
   orders.forEach(function(o){if(totals[o.platform]!==undefined)totals[o.platform]+=o.amount;});
