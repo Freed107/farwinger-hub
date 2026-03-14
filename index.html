@@ -29,6 +29,7 @@
   --ebay: #e53238;
   --shopify: #96bf48;
   --amazon: #ff9900;
+  --tiktok: #ff0050;
   --direct: var(--fw-blue);
   --accent: var(--fw-amber);
   --green: #5dbb7a;
@@ -93,6 +94,7 @@ body::before { content:''; position:fixed; inset:0;
 .pill[data-p=ebay] { color:var(--ebay); } .pill[data-p=ebay]::after { background:var(--ebay); } .pill[data-p=ebay].active { border-color:var(--ebay); }
 .pill[data-p=shopify] { color:var(--shopify); } .pill[data-p=shopify]::after { background:var(--shopify); } .pill[data-p=shopify].active { border-color:var(--shopify); }
 .pill[data-p=amazon] { color:var(--amazon); } .pill[data-p=amazon]::after { background:var(--amazon); } .pill[data-p=amazon].active { border-color:var(--amazon); }
+.pill[data-p=tiktok] { color:var(--tiktok); } .pill[data-p=tiktok]::after { background:var(--tiktok); } .pill[data-p=tiktok].active { border-color:var(--tiktok); }
 .pill[data-p=direct] { color:var(--fw-blue-light); } .pill[data-p=direct]::after { background:var(--fw-blue); } .pill[data-p=direct].active { border-color:var(--fw-blue); }
 .pdot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
 
@@ -151,6 +153,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 .ptag.ebay { background:rgba(229,50,56,.12);color:var(--ebay); }
 .ptag.shopify { background:rgba(150,191,72,.12);color:var(--shopify); }
 .ptag.amazon { background:rgba(255,153,0,.12);color:var(--amazon); }
+.ptag.tiktok { background:rgba(255,0,80,.12);color:var(--tiktok); }
 .ptag.direct { background:rgba(74,128,158,.15);color:var(--fw-blue-light); }
 .stag { display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-family:'DM Mono',monospace;font-size:11px; }
 .stag.pending,.stag.quoted { background:rgba(245,200,66,.1);color:var(--amber); }
@@ -323,6 +326,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
         <div class="pill" data-p="ebay" onclick="filterOverview('ebay',this)"><div class="pdot" style="background:var(--ebay)"></div>eBay</div>
         <div class="pill" data-p="shopify" onclick="filterOverview('shopify',this)"><div class="pdot" style="background:var(--shopify)"></div>Shopify</div>
         <div class="pill" data-p="amazon" onclick="filterOverview('amazon',this)"><div class="pdot" style="background:var(--amazon)"></div>Amazon</div>
+        <div class="pill" data-p="tiktok" onclick="filterOverview('tiktok',this)"><div class="pdot" style="background:var(--tiktok)"></div>TikTok</div>
         <div class="pill" data-p="direct" onclick="filterOverview('direct',this)"><div class="pdot" style="background:var(--fw-blue)"></div>Direct</div>
       </div>
       <div class="stats-grid">
@@ -500,7 +504,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 </div>
 
 <script>
-const PLATFORMS={etsy:{color:'var(--etsy)',label:'Etsy'},ebay:{color:'var(--ebay)',label:'eBay'},shopify:{color:'var(--shopify)',label:'Shopify'},amazon:{color:'var(--amazon)',label:'Amazon'},direct:{color:'var(--fw-blue-light)',label:'Direct'}};
+const PLATFORMS={etsy:{color:'var(--etsy)',label:'Etsy'},ebay:{color:'var(--ebay)',label:'eBay'},shopify:{color:'var(--shopify)',label:'Shopify'},amazon:{color:'var(--amazon)',label:'Amazon'},tiktok:{color:'var(--tiktok)',label:'TikTok Shop'},direct:{color:'var(--fw-blue-light)',label:'Direct'}};
 const today=new Date();
 function daysFrom(d){return Math.round((new Date(d)-today)/(864e5));}
 
@@ -1021,6 +1025,7 @@ async function fetchShipStationOrders() {
           if (mp.includes('etsy')) SS_STORE_MAP[s.storeId] = 'etsy';
           else if (mp.includes('ebay')) SS_STORE_MAP[s.storeId] = 'ebay';
           else if (mp.includes('amazon')) SS_STORE_MAP[s.storeId] = 'amazon';
+          else if (mp.includes('tiktok')) SS_STORE_MAP[s.storeId] = 'tiktok';
           else if (mp.includes('shopify')) SS_STORE_MAP[s.storeId] = 'shopify';
         });
       }
@@ -1173,16 +1178,20 @@ function renderOverview(){
 }
 
 function renderPlatformChart(orders){
-  const totals={};
-  orders.forEach(o=>{totals[o.platform]=(totals[o.platform]||0)+o.amount;});
-  const max=Math.max(...Object.values(totals),1);
-  const cols={etsy:'var(--etsy)',ebay:'var(--ebay)',shopify:'var(--shopify)',amazon:'var(--amazon)',direct:'var(--fw-blue)'};
-  document.getElementById('platformChart').innerHTML=Object.entries(totals).map(([p,v])=>`
-    <div class="bar-wrap">
-      <div class="bar" style="height:${Math.max(v/max*120,4)}px;background:${cols[p]||'var(--fw-amber)'}22;border-top:2px solid ${cols[p]||'var(--fw-amber)'}"></div>
-      <div class="bar-label" style="color:var(--text-dim);font-size:10px">${PLATFORMS[p]?.label||p}</div>
-      <div class="bar-label">£${v.toFixed(0)}</div>
-    </div>`).join('');
+  var ALL=['etsy','ebay','shopify','amazon','tiktok','direct'];
+  var totals={etsy:0,ebay:0,shopify:0,amazon:0,tiktok:0,direct:0};
+  orders.forEach(function(o){if(totals[o.platform]!==undefined)totals[o.platform]+=o.amount;});
+  var max=Math.max.apply(null,Object.values(totals).concat([1]));
+  var cols={etsy:'var(--etsy)',ebay:'var(--ebay)',shopify:'var(--shopify)',amazon:'var(--amazon)',tiktok:'var(--tiktok)',direct:'var(--fw-blue)'};
+  var lbls={etsy:'Etsy',ebay:'eBay',shopify:'Shopify',amazon:'Amazon',tiktok:'TikTok',direct:'Direct'};
+  document.getElementById('platformChart').innerHTML=ALL.map(function(p){
+    var v=totals[p];var c=cols[p];var active=v>0;
+    return '<div class="bar-wrap">'+
+      '<div class="bar" style="height:'+Math.max(v/max*120,active?4:2)+'px;background:'+c+(active?'22':'11')+';border-top:2px solid '+c+(active?'':'66')+'"></div>'+
+      '<div class="bar-label" style="color:'+(active?'var(--text-dim)':'var(--text-muted)')+';font-size:9px">'+lbls[p]+'</div>'+
+      '<div class="bar-label" style="color:'+(active?'var(--fw-amber)':'var(--text-muted)')+'">'+( active?'\xa3'+v.toFixed(0):'\u2014')+'</div>'+
+    '</div>';
+  }).join('');
 }
 
 function renderTopItems(orders){
@@ -1202,7 +1211,7 @@ function renderTopItems(orders){
 
 function renderActivityFeed(orders){
   const recent=[...orders].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,8);
-  const cols={etsy:'var(--etsy)',ebay:'var(--ebay)',shopify:'var(--shopify)',amazon:'var(--amazon)',direct:'var(--fw-blue)'};
+  const cols={etsy:'var(--etsy)',ebay:'var(--ebay)',shopify:'var(--shopify)',amazon:'var(--amazon)',tiktok:'var(--tiktok)',direct:'var(--fw-blue)'};
   document.getElementById('activityFeed').innerHTML=recent.map(o=>`
     <div class="feed-item" onclick='openOrderPanel(${JSON.stringify(o).replace(/'/g,"\'")})'> 
       <div class="feed-icon" style="background:${cols[o.platform]||'var(--fw-amber)'}20;color:${cols[o.platform]||'var(--fw-amber)'}">${PLATFORMS[o.platform]?.label[0]||'?'}</div>
