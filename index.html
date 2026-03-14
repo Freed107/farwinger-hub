@@ -110,8 +110,8 @@ body::before { content:''; position:fixed; inset:0;
 /* ─── CHARTS ─── */
 .charts-row { display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px; }
 @media(max-width:900px){ .charts-row { grid-template-columns:1fr; } }
-.chart-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px; }
-.chart-title { font-size:12px;font-weight:600;margin-bottom:14px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase; }
+.chart-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;padding-top:16px; }
+.chart-title { font-size:12px;font-weight:600;margin-bottom:14px;margin-top:6px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase; }
 .chart-area { height:130px;display:flex;align-items:flex-end;gap:6px; }
 .bar-wrap { display:flex;flex-direction:column;align-items:center;flex:1;gap:4px; }
 .bar { width:100%;border-radius:4px 4px 0 0;transition:height .5s cubic-bezier(.34,1.56,.64,1);min-height:3px; }
