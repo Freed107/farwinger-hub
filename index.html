@@ -936,15 +936,26 @@ function formatGmailDate(dateStr) {
 
 
 // ── ShipStation order mapper ─────────────────────────────────────
+// ── ShipStation store ID → platform map ─────────────────────────
+// Fetched from /stores endpoint on startup, keyed by storeId
+const SS_STORE_MAP = {
+  177881: 'etsy',
+  177882: 'ebay',
+  177890: 'shopify',
+  177878: 'direct',
+};
+
 function mapSSOrder(o) {
-  const store = (o.advancedOptions?.storeId || '');
-  // Detect platform from store name / tag
-  let platform = 'shopify'; // ShipStation is Shopify-connected by default
-  const tags = (o.tagIds || []);
-  const storeName = (o.orderSource || '').toLowerCase();
-  if (storeName.includes('etsy')) platform = 'etsy';
-  else if (storeName.includes('ebay')) platform = 'ebay';
-  else if (storeName.includes('amazon')) platform = 'amazon';
+  const storeId = o.advancedOptions?.storeId;
+  // Use storeId map first (most reliable), fall back to orderSource string
+  let platform = SS_STORE_MAP[storeId] || 'shopify';
+  if (platform === 'shopify') {
+    // Double-check with orderSource string in case new stores are added
+    const storeName = (o.orderSource || '').toLowerCase();
+    if (storeName.includes('etsy')) platform = 'etsy';
+    else if (storeName.includes('ebay')) platform = 'ebay';
+    else if (storeName.includes('amazon')) platform = 'amazon';
+  }
 
   const item = o.items && o.items.length > 0
     ? o.items.map(i => i.name).join(', ')
@@ -997,6 +1008,24 @@ async function fetchShipStationOrders() {
       sortBy: 'OrderDate',
       sortDir: 'DESC'
     });
+    // Fetch store list first to ensure platform mapping is up to date
+    try {
+      const storesUrl = encodeURIComponent('https://ssapi.shipstation.com/stores');
+      const storesResp = await fetch(`${PROXY}/?url=${storesUrl}`, {
+        headers: { 'Authorization': `Basic ${CONFIG.shipstation.authToken}` }
+      });
+      if (storesResp.ok) {
+        const stores = await storesResp.json();
+        stores.forEach(s => {
+          const mp = (s.marketplaceName || '').toLowerCase();
+          if (mp.includes('etsy')) SS_STORE_MAP[s.storeId] = 'etsy';
+          else if (mp.includes('ebay')) SS_STORE_MAP[s.storeId] = 'ebay';
+          else if (mp.includes('amazon')) SS_STORE_MAP[s.storeId] = 'amazon';
+          else if (mp.includes('shopify')) SS_STORE_MAP[s.storeId] = 'shopify';
+        });
+      }
+    } catch(e) { /* use hardcoded map */ }
+
     const ssUrl = encodeURIComponent(`https://ssapi.shipstation.com/orders?${params}`);
     const resp = await fetch(`${PROXY}/?url=${ssUrl}`, {
       headers: {
