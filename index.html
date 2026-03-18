@@ -313,6 +313,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
       <span id="live-status" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted)">● demo</span>
       <button onclick="fetchShipStationOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-amber);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">⟳ Refresh</button>
       <button onclick="fetchZohoOrders()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--fw-blue-light);font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">⟳ Zoho</button>
+      <button onclick="fetchSendCloudParcels()" style="background:var(--surface2);border:1px solid var(--border2);color:#48c774;font-size:11px;font-family:'DM Mono',monospace;padding:4px 12px;border-radius:6px;cursor:pointer">⟳ SendCloud</button>
     </div>
   </div>
 
@@ -568,6 +569,10 @@ const CONFIG = {
     // Gmail is accessed via Claude API with Gmail MCP — no OAuth needed
     account: 'administrator@farwinger.com',
     mcpUrl: 'https://gmail.mcp.claude.com/mcp'
+  },
+  sendcloud: {
+    authToken: btoa('70d92a2f-f2be-4423-8a2f-c37c93a2b6d8:045b5b80e2264bca850f979b7fa97320'),
+    baseUrl: 'https://panel.sendcloud.sc/api/v2'
   }
 };
 
@@ -668,6 +673,88 @@ async function fetchZohoOrders() {
     console.error('Zoho fetch error:', err);
     showBanner(`⚠ Zoho connection failed: ${err.message}`, 'error');
     return [];
+  }
+}
+
+// ── SendCloud: fetch parcels and cross-reference with orders ─────
+let sendcloudParcels = [];
+let sendcloudLoaded = false;
+
+async function fetchSendCloudParcels() {
+  try {
+    // Fetch recent parcels (up to 100)
+    const scUrl = encodeURIComponent(`${CONFIG.sendcloud.baseUrl}/parcels?limit=100`);
+    const resp = await fetch(`${PROXY}/?url=${scUrl}`, {
+      headers: { 'Authorization': 'Basic ' + CONFIG.sendcloud.authToken }
+    });
+    if (!resp.ok) throw new Error(`SendCloud API error: ${resp.status}`);
+    const data = await resp.json();
+    sendcloudParcels = data.parcels || [];
+    sendcloudLoaded = true;
+
+    // Cross-reference with orders
+    let updated = 0;
+    const scMap = {};
+    sendcloudParcels.forEach(p => {
+      if (!p.order_number) return;
+      // Normalise: SendCloud may have "#1002SF", orders have "SHO-1002SF" or "ETS-3998719139"
+      const rawNum = p.order_number.replace(/^#/, '');
+      // Store best status per order number (prefer shipped/delivered over failed)
+      const statusRank = { 'Delivered': 4, 'Parcel en route': 3, 'At sorting centre': 3, 'Ready to send': 2, 'Announcement failed': 0 };
+      const rank = statusRank[p.status?.message] || 1;
+      if (!scMap[rawNum] || rank > (scMap[rawNum]._rank || 0)) {
+        scMap[rawNum] = { ...p, _rank: rank };
+      }
+    });
+
+    ORDERS.forEach(order => {
+      // Try matching by order number (strip platform prefix)
+      const orderNum = order.id.replace(/^[A-Z]{2,3}-/, '');
+      const ssOrderNum = order._raw?.orderNumber?.toString() || '';
+      // Also try raw ShipStation order number
+      const parcel = scMap[orderNum] || scMap[ssOrderNum] || scMap[order.id];
+      if (!parcel) return;
+
+      // Attach SendCloud data
+      order._sendcloud = {
+        status: parcel.status?.message || 'Unknown',
+        statusId: parcel.status?.id,
+        tracking: parcel.tracking_number || null,
+        trackingUrl: parcel.tracking_url || null,
+        carrier: parcel.carrier?.code || null,
+        shipment: parcel.shipment?.name || null,
+        dateCreated: parcel.date_created || null
+      };
+
+      // Update order status if SendCloud is ahead of ShipStation
+      const scStatus = parcel.status?.message?.toLowerCase() || '';
+      const isDispatched = scStatus.includes('en route') || scStatus.includes('sorting') || scStatus.includes('ready to send') || scStatus.includes('at parcel');
+      const isDelivered = scStatus.includes('delivered');
+
+      if (isDelivered && order.status !== 'delivered') {
+        order.status = 'delivered';
+        order._statusSource = 'sendcloud';
+        updated++;
+      } else if (isDispatched && order.status === 'pending') {
+        order.status = 'shipped';
+        order._statusSource = 'sendcloud';
+        updated++;
+      }
+    });
+
+    // Rebuild production data if statuses changed (shipped items leave the queue)
+    if (updated > 0) {
+      buildProdData();
+      renderAll();
+    }
+
+    console.log(`[SendCloud] ${sendcloudParcels.length} parcels loaded, ${updated} order statuses updated`);
+    showBanner(`✓ SendCloud: ${sendcloudParcels.length} parcels synced${updated ? `, ${updated} status${updated>1?'es':''} corrected` : ''}`, 'success');
+    setTimeout(hideBanner, 4000);
+    renderAll();
+  } catch(err) {
+    console.error('SendCloud fetch error:', err);
+    showBanner(`⚠ SendCloud sync failed: ${err.message}`, 'error');
   }
 }
 
@@ -1422,7 +1509,9 @@ function renderOrdersTable(search){
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dim);font-size:12px">${o.item}</td>
       <td><span class="urgency ${urgencyClass(o.due)}">${urgencyLabel(o.due)}</span></td>
       <td><span class="amount">£${o.amount.toFixed(2)}</span></td>
-      <td><span class="stag ${o.status}">${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</span></td>
+      <td>
+        <span class="stag ${o.status}">${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</span>${o._statusSource==='sendcloud'?'<span title="Status corrected by SendCloud" style="font-size:9px;color:#48c774;margin-left:3px">SC</span>':''}${o._sendcloud?.tracking?`<a href="${o._sendcloud.trackingUrl||'#'}" target="_blank" onclick="event.stopPropagation()" title="${o._sendcloud.carrier||''}: ${o._sendcloud.tracking}" style="font-size:9px;color:#48c774;margin-left:4px;text-decoration:none">📦</a>`:''}
+      </td>
     </tr>`).join('');
 }
 
@@ -2113,10 +2202,17 @@ function openOrderPanel(o){
       <div class="detail-group-label">Order Details</div>
       <div class="detail-row"><span class="dk">Customer</span><span class="dv">${o.customer}</span></div>
       <div class="detail-row"><span class="dk">Amount</span><span class="dv" style="color:var(--fw-amber)">£${o.amount.toFixed(2)}</span></div>
-      <div class="detail-row"><span class="dk">Status</span><span class="stag ${o.status}">${o.status}</span></div>
+      <div class="detail-row"><span class="dk">Status</span><span class="stag ${o.status}">${o.status}</span>${o._statusSource==='sendcloud'?'<span style="font-size:10px;color:#48c774;margin-left:6px">✓ Corrected by SendCloud</span>':''}</div>
       <div class="detail-row"><span class="dk">Due date</span><span class="urgency ${urgencyClass(o.due)}">${o.due} · ${urgencyLabel(o.due)}</span></div>
       <div class="detail-row"><span class="dk">Ship to</span><span class="dv">${o.country}</span></div>
-    </div>
+    </div>${o._sendcloud ? `
+    <div class="detail-group">
+      <div class="detail-group-label" style="color:#48c774">SendCloud Shipping</div>
+      <div class="detail-row"><span class="dk">SC Status</span><span class="dv" style="color:#48c774">${o._sendcloud.status}</span></div>
+      ${o._sendcloud.carrier ? `<div class="detail-row"><span class="dk">Carrier</span><span class="dv">${o._sendcloud.shipment || o._sendcloud.carrier}</span></div>` : ''}
+      ${o._sendcloud.tracking ? `<div class="detail-row"><span class="dk">Tracking</span><span class="dv"><a href="${o._sendcloud.trackingUrl||'#'}" target="_blank" style="color:#48c774;font-family:'DM Mono',monospace;font-size:11px">${o._sendcloud.tracking}</a></span></div>` : ''}
+      ${o._sendcloud.dateCreated ? `<div class="detail-row"><span class="dk">Shipped</span><span class="dv">${o._sendcloud.dateCreated}</span></div>` : ''}
+    </div>` : ''}
     <div class="detail-group">
       <div class="detail-group-label">Actions</div>
       <button class="btn" style="width:100%;justify-content:center;margin-bottom:8px">Open in ${PLATFORMS[o.platform]?.label}</button>
@@ -2139,8 +2235,8 @@ function exportCSV(){
 
 buildProdData();
 renderOverview();
-fetchShipStationOrders();
-fetchZohoOrders();
+// Load orders then cross-reference with SendCloud
+Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels());
 // Check API key status on load
 (function() {
   const k = getAnthropicKey();
