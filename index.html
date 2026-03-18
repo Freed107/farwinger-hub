@@ -1778,29 +1778,54 @@ function renderFulfilment(){
   const counts = { all: all.length, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
   all.forEach(o => { const s = Math.min(getEffectiveStage(o), 4); counts[s]++; });
 
-  // Summary bar
+  // (summary bar and filter buttons are rendered after SC parcel counts are calculated below)
+
+  // Build SendCloud-only parcels (not already matched to an order)
+  const matchedOrderNums = new Set();
+  ORDERS.forEach(o => { if (o._sendcloud) { matchedOrderNums.add(o.id.replace(/^[A-Z]{2,3}-/,'')); matchedOrderNums.add(o._raw?.orderNumber?.toString()); } });
+  const scOnlyParcels = sendcloudParcels.filter(p => {
+    if (!p.order_number) return false;
+    const raw = p.order_number.replace(/^#/,'');
+    return !matchedOrderNums.has(raw) && !matchedOrderNums.has(p.order_number);
+  });
+  // Deduplicate SC parcels by order_number (keep best status)
+  const scDeduped = {};
+  scOnlyParcels.forEach(p => {
+    const key = p.order_number;
+    const rank = {'Delivered':4,'Parcel en route':3,'At sorting centre':3,'At Customs':3,'Ready to send':2,'Announcement failed':0}[p.status?.message]||1;
+    if (!scDeduped[key] || rank > (scDeduped[key]._rank||0)) scDeduped[key] = {...p, _rank: rank};
+  });
+  const scParcels = Object.values(scDeduped);
+  const scInTransit = scParcels.filter(p => { const m=(p.status?.message||'').toLowerCase(); return !m.includes('delivered') && !m.includes('cancelled'); });
+  const scDelivered = scParcels.filter(p => (p.status?.message||'').toLowerCase().includes('delivered'));
+
+  // Update counts to include SC-only parcels
+  const transitTotal = counts[2] + counts[3] + scInTransit.length;
+  const deliveredTotal = counts[4] + scDelivered.length;
+
+  // Filter buttons with updated counts
+  const filterLabels = [
+    ['all', `All (${counts.all})`],
+    ['todo', `To do (${counts[0]+counts[1]})`],
+    ['transit', `In transit (${transitTotal})`],
+    ['delivered', `Delivered (${deliveredTotal})`],
+    ['issues', `Issues`]
+  ];
+  document.getElementById('fulfilFilters').innerHTML = `<div class="fulfil-filters">${filterLabels.map(([k,l]) =>
+    `<div class="fulfil-filter ${fulfilFilter===k?'active':''}" onclick="fulfilFilter='${k}';renderFulfilment()">${l}</div>`
+  ).join('')}</div>`;
+
+  // Update summary counts too
   document.getElementById('fulfilSummary').innerHTML = `
     <div class="fulfil-summary">
       <div class="fulfil-stat"><span class="num">${counts.all}</span> orders</div>
       <div class="fulfil-stat" style="color:var(--text-muted)">│</div>
       <div class="fulfil-stat"><span class="num" style="color:var(--fw-amber)">${counts[0]}</span> awaiting packaging</div>
       <div class="fulfil-stat"><span class="num" style="color:var(--fw-amber)">${counts[1]}</span> need labels</div>
-      <div class="fulfil-stat"><span class="num" style="color:var(--fw-blue)">${counts[2]+counts[3]}</span> dispatched / in transit</div>
-      <div class="fulfil-stat"><span class="num" style="color:var(--green)">${counts[4]}</span> delivered</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--fw-blue)">${transitTotal}</span> dispatched / in transit</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--green)">${deliveredTotal}</span> delivered</div>
       ${sendcloudLoaded ? '<div style="margin-left:auto;font-size:10px;color:var(--green);font-family:\'DM Mono\',monospace">● SendCloud synced</div>' : ''}
     </div>`;
-
-  // Filter buttons
-  const filterLabels = [
-    ['all', `All (${counts.all})`],
-    ['todo', `To do (${counts[0]+counts[1]})`],
-    ['transit', `In transit (${counts[2]+counts[3]})`],
-    ['delivered', `Delivered (${counts[4]})`],
-    ['issues', `Issues`]
-  ];
-  document.getElementById('fulfilFilters').innerHTML = `<div class="fulfil-filters">${filterLabels.map(([k,l]) =>
-    `<div class="fulfil-filter ${fulfilFilter===k?'active':''}" onclick="fulfilFilter='${k}';renderFulfilment()">${l}</div>`
-  ).join('')}</div>`;
 
   // Filter orders
   let filtered = all;
@@ -1809,10 +1834,40 @@ function renderFulfilment(){
   else if (fulfilFilter === 'delivered') filtered = all.filter(o => getEffectiveStage(o) >= 4);
   else if (fulfilFilter === 'issues') filtered = all.filter(o => !o.phone || !o.email || !o.address);
 
-  // Render cards
-  document.getElementById('fulfilmentView').innerHTML = filtered.length === 0
-    ? '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:\'DM Mono\',monospace;font-size:13px">No orders in this category</div>'
-    : filtered.map(o => {
+  // Helper: render a SendCloud-only parcel card
+  function renderScParcel(p) {
+    const msg = p.status?.message || 'Unknown';
+    const isDel = msg.toLowerCase().includes('delivered');
+    const isEnRoute = msg.toLowerCase().includes('en route') || msg.toLowerCase().includes('sorting') || msg.toLowerCase().includes('customs');
+    const carrier = (p.carrier?.code || 'carrier').toUpperCase().replace('_GB','').replace('V2','').replace('_','-');
+    const trackUrl = p.tracking_url || (p.tracking_number ? `https://tracking.sendcloud.sc/${p.tracking_number}` : '#');
+    const addr = [p.address, p.city, p.postal_code, p.country?.iso_2].filter(Boolean).join(', ');
+    const itemDesc = p.parcel_items?.map(i => i.description).join(', ') || p.order_number;
+    const dateStr = p.date_created ? (()=>{const pts=p.date_created.split('-');return pts.length>=3?pts[0]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(pts[1])-1]:p.date_created.substring(0,10)})() : '';
+    const countryFlag = p.country?.iso_2 ? String.fromCodePoint(...[...p.country.iso_2.toUpperCase()].map(c=>0x1F1E6+c.charCodeAt(0)-65)) : '';
+
+    return `<div class="fulfil-item ${isDel?'stage-delivered':isEnRoute?'stage-shipped':''}">
+      <div class="fulfil-top">
+        <div>
+          <div class="fulfil-customer">${countryFlag} ${p.name||'Unknown'}</div>
+          <div class="fulfil-item-name">${itemDesc}</div>
+          ${addr?`<div class="fulfil-address">📍 ${addr}</div>`:''}
+        </div>
+        <div class="fulfil-meta">
+          <span class="order-id">${p.order_number||''}</span>
+        </div>
+      </div>
+      <div class="fulfil-tracking">
+        <span style="font-weight:600">${carrier}</span>
+        ${p.tracking_number?`<a href="${trackUrl}" target="_blank" rel="noopener">📦 ${p.tracking_number}</a>`:'<span style="color:var(--text-muted)">No tracking</span>'}
+        <span style="color:${isDel?'var(--green)':isEnRoute?'var(--fw-blue)':'var(--fw-amber)'}">${msg}</span>
+        ${dateStr?`<span style="margin-left:auto">${dateStr}</span>`:''}
+      </div>
+    </div>`;
+  }
+
+  // Render order cards
+  const orderCards = filtered.map(o => {
     const m=[];if(!o.phone)m.push('Phone');if(!o.email)m.push('Email');if(!o.address)m.push('Address');
     const stage = getEffectiveStage(o);
     const uc = urgencyClass(o.due);
@@ -1862,6 +1917,17 @@ function renderFulfilment(){
       ${trackingHtml}
     </div>`;
   }).join('');
+
+  // Append SC-only parcels for transit/delivered/all views
+  let scCards = '';
+  if (fulfilFilter === 'transit') scCards = scInTransit.map(renderScParcel).join('');
+  else if (fulfilFilter === 'delivered') scCards = scDelivered.map(renderScParcel).join('');
+  else if (fulfilFilter === 'all') scCards = ''; // all view shows only hub orders
+
+  const allCards = orderCards + scCards;
+  document.getElementById('fulfilmentView').innerHTML = allCards.length === 0
+    ? '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:\'DM Mono\',monospace;font-size:13px">No orders in this category</div>'
+    : allCards;
 }
 
 function advanceFulfilStage(id, clickedIdx, currentStage) {
