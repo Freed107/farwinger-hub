@@ -372,8 +372,11 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <!-- TAB B: PRODUCTION -->
     <div class="view" id="view-production">
       <div class="section-head">
-        <div><div class="section-title">Production Queue</div><div class="section-sub">Aggregated by product type · checkboxes sync via Firestore</div></div>
-        <button class="btn" onclick="toggleCompletedProd()" id="hideBtn">☑ Hide completed</button>
+        <div><div class="section-title">Production Queue</div><div class="section-sub">Built from live orders · grouped by product type · checkboxes saved locally</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="buildProdData();renderProduction();updateBadges();showBanner('✓ Production queue rebuilt from orders','success');setTimeout(hideBanner,3000)" title="Rebuild production queue from current orders">⟳ Rebuild</button>
+          <button class="btn" onclick="toggleCompletedProd()" id="hideBtn">☑ Hide completed</button>
+        </div>
       </div>
       <div id="productionView"></div>
     </div>
@@ -656,6 +659,7 @@ async function fetchZohoOrders() {
     nonDirect.forEach(o => ORDERS.push(o));
     zohoOrders.forEach(o => ORDERS.push(o));
 
+    buildProdData();
     renderAll();
     const count = zohoOrders.length;
     showBanner(`✓ Loaded ${count} Zoho direct order${count !== 1 ? 's' : ''} (${invoices.length} invoice${invoices.length !== 1 ? 's' : ''}, ${estimates.length} quote${estimates.length !== 1 ? 's' : ''})`, 'success');
@@ -1054,6 +1058,7 @@ async function fetchShipStationOrders() {
     if (statusEl) { statusEl.textContent = '● live · ' + liveOrders.length; statusEl.style.color = '#7ad47a'; }
     showBanner(`✓ Loaded ${liveOrders.length} live orders from ShipStation`, 'success');
     setTimeout(hideBanner, 4000);
+    buildProdData();
     renderAll();
   } catch(err) {
     loadingLive = false;
@@ -1084,6 +1089,7 @@ function hideBanner() {
 }
 function renderAll() {
   renderOverview();
+  updateBadges();
   const vp = document.getElementById('view-production');
   if (vp && vp.classList.contains('active')) renderProduction();
   const vf = document.getElementById('view-fulfilment');
@@ -1105,22 +1111,148 @@ const ORDERS=[
   {id:'AMZ-3300',platform:'amazon',customer:'Sophie Fischer',item:'Hemisphere · 50mm · Beech',date:'2026-03-08',due:'2026-03-11',amount:95.00,status:'pending',country:'🇩🇪',phone:true,email:true,address:true},
 ];
 
-const PROD_DATA=[
-  {type:'Ball',items:[
-    {size:'100mm',vars:'Walnut · Flat ends',qty:2,checks:[true,true,false,false]},
-    {size:'120mm',vars:'Pine (Redwood) · Standard',qty:4,checks:[true,false,false,false]},
-    {size:'130mm',vars:'Walnut · Flat ends',qty:1,checks:[true,true,true,false]},
-    {size:'140mm',vars:'Premium Oak · Standard',qty:1,checks:[false,false,false,false]},
-  ]},
-  {type:'Hemisphere',items:[
-    {size:'130mm',vars:'Pine (Redwood) · Standard',qty:1,checks:[true,true,false,false]},
-    {size:'150mm',vars:'Pine (Redwood) · Standard',qty:1,checks:[false,false,false,false]},
-  ]},
-  {type:'Bun Stack Leg',items:[{size:'120mm',vars:'Mixed · Walnut top',qty:4,checks:[true,true,true,true]}]},
-  {type:'Multi Stack Leg',items:[{size:'140mm',vars:'Mixed · 5 stack',qty:1,checks:[true,false,false,false]}]},
-  {type:'Cylinder',items:[{size:'120mm',vars:'Oak · Standard',qty:1,checks:[true,true,false,false]}]},
-  {type:'Cone',items:[{size:'100mm',vars:'Pine (Redwood) · Standard',qty:2,checks:[false,false,false,false]}]},
-];
+let PROD_DATA=[];
+
+// ── Parse order items into production queue ──────────────────────
+function buildProdData() {
+  // Product type detection — order matters (multi-word first)
+  const typePatterns = [
+    { type: 'Multi Stack Leg', re: [/multi[\s-]?stack/i, /multi[\s-]?leg/i, /5[\s-]?stack\s*leg/i] },
+    { type: 'Bun Stack Leg',   re: [/bun[\s-]?stack/i, /bun[\s-]?leg/i, /bun[\s-]?f[eo]{2}t/i] },
+    { type: 'Half Button',     re: [/half[\s-]?button/i] },
+    { type: 'Hemisphere',      re: [/hemisphere/i, /half[\s-]?ball/i, /half[\s-]?sphere/i] },
+    { type: 'Ball',            re: [/\bball\b/i, /\bsphere\b/i, /wooden[\s-]?ball/i] },
+    { type: 'Cylinder',        re: [/cylinder/i] },
+    { type: 'Cone',            re: [/\bcone\b/i] },
+  ];
+  const woodPatterns = [
+    { wood: 'American Black Walnut', re: [/american[\s-]?black[\s-]?walnut/i, /black[\s-]?walnut/i] },
+    { wood: 'Walnut',           re: [/\bwalnut\b/i] },
+    { wood: 'Premium Oak',      re: [/premium[\s-]?oak/i] },
+    { wood: 'Red Oak',          re: [/red[\s-]?oak/i] },
+    { wood: 'Rustic Oak',       re: [/rustic[\s-]?oak/i] },
+    { wood: 'Pine (Redwood)',   re: [/\bpine\b/i, /\bredwood\b/i] },
+    { wood: 'Oak',              re: [/\boak\b(?![\s-]*(red|rustic|premium))/i] },
+    { wood: 'Beech',            re: [/\bbeech\b/i] },
+    { wood: 'Birch',            re: [/\bbirch\b/i] },
+    { wood: 'Mixed',            re: [/\bmixed\b/i] },
+  ];
+  function detectType(s)  { for (const t of typePatterns) if (t.re.some(r=>r.test(s))) return t.type; return null; }
+  function detectWood(s)  { for (const w of woodPatterns) if (w.re.some(r=>r.test(s))) return w.wood; return null; }
+  function extractSize(s) { const m=String(s).match(/(\d{2,3})\s*mm/i); return m ? parseInt(m[1]) : null; }
+  function extractVars(s) {
+    const v=[];
+    if (/flat[\s-]*(end|base|bottom)/i.test(s)) v.push('Flat ends');
+    const dMatch = s.match(/dowel[\s-]*(\d+)\s*mm/i);
+    if (dMatch) v.push('Dowel '+dMatch[1]+'mm');
+    if (/\bpolished\b/i.test(s)) v.push('Polished');
+    if (/\boiled\b/i.test(s)) v.push('Oiled');
+    return v.length ? v.join(' · ') : 'Standard';
+  }
+
+  // Collect line items from active (non-completed) orders
+  const activeOrders = ORDERS.filter(o =>
+    !['shipped','delivered','cancelled'].includes(o.status)
+  );
+
+  const lineItems = [];
+  activeOrders.forEach(order => {
+    // Use raw ShipStation items for proper per-item quantity
+    if (order._raw && order._raw.items && order._raw.items.length) {
+      order._raw.items.forEach(ri => {
+        lineItems.push({
+          name: ri.name || ri.sku || '',
+          qty:  ri.quantity || 1,
+          sku:  ri.sku || '',
+          orderId: order.id,
+          customer: order.customer,
+          due: order.due,
+          platform: order.platform
+        });
+      });
+    } else {
+      // Zoho / demo — split comma-separated item strings
+      (order.item||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(name => {
+        lineItems.push({ name, qty: 1, sku: '', orderId: order.id, customer: order.customer, due: order.due, platform: order.platform });
+      });
+    }
+  });
+
+  // Group by product type → size+vars key
+  const groups = {};
+  const unparsed = [];
+
+  lineItems.forEach(li => {
+    const type = detectType(li.name);
+    const size = extractSize(li.name);
+    const wood = detectWood(li.name) || 'Unknown';
+    const variant = extractVars(li.name);
+
+    if (!type) { unparsed.push(li); return; }
+
+    const sizeLabel = size ? size+'mm' : '?';
+    const vars = wood + ' · ' + variant;
+    const key = sizeLabel + '|' + vars;
+
+    if (!groups[type]) groups[type] = {};
+    if (!groups[type][key]) {
+      groups[type][key] = { size: sizeLabel, vars, qty: 0, checks: [false,false,false,false], orders: [] };
+    }
+    groups[type][key].qty += li.qty;
+    if (!groups[type][key].orders.some(x => x.id === li.orderId)) {
+      groups[type][key].orders.push({ id: li.orderId, customer: li.customer, due: li.due, platform: li.platform });
+    }
+  });
+
+  // Sort types by predefined order, then build PROD_DATA
+  const typeOrder = ['Ball','Hemisphere','Half Button','Bun Stack Leg','Multi Stack Leg','Cylinder','Cone'];
+  const result = [];
+  typeOrder.forEach(type => {
+    if (!groups[type]) return;
+    const items = Object.values(groups[type]).sort((a,b) => (parseDiameter(a.size)||0) - (parseDiameter(b.size)||0));
+    result.push({ type, items });
+  });
+  // Any types not in our list
+  Object.keys(groups).filter(t => !typeOrder.includes(t)).forEach(type => {
+    result.push({ type, items: Object.values(groups[type]) });
+  });
+  // Unparsed items
+  if (unparsed.length) {
+    result.push({ type: 'Other / Unparsed', items: unparsed.map(li => ({
+      size: extractSize(li.name) ? extractSize(li.name)+'mm' : '?',
+      vars: li.name.substring(0,50),
+      qty: li.qty,
+      checks: [false,false,false,false],
+      orders: [{ id: li.orderId, customer: li.customer, due: li.due, platform: li.platform }]
+    }))});
+  }
+
+  // Restore checkbox state from localStorage
+  const saved = localStorage.getItem('farwinger_prod_checks');
+  if (saved) {
+    try {
+      const map = JSON.parse(saved);
+      result.forEach(g => g.items.forEach(item => {
+        const k = g.type + '|' + item.size + '|' + item.vars;
+        if (map[k]) item.checks = map[k];
+      }));
+    } catch(e) {}
+  }
+
+  PROD_DATA = result;
+  console.log(`[Production] Built ${result.reduce((s,g)=>s+g.items.length,0)} production items from ${activeOrders.length} active orders (${unparsed.length} unparsed)`);
+  return result;
+}
+
+// ── Save checkbox state to localStorage ──────────────────────────
+function saveProdChecks() {
+  const map = {};
+  PROD_DATA.forEach(g => g.items.forEach(item => {
+    const k = g.type + '|' + item.size + '|' + item.vars;
+    map[k] = item.checks;
+  }));
+  localStorage.setItem('farwinger_prod_checks', JSON.stringify(map));
+}
 
 const CS_MESSAGES=[
   {id:1,from:'Laura H.',platform:'etsy',preview:'Hi, can you do a custom 35mm sphere in...',time:'2h ago',thread:[{dir:'in',text:'Hi, can you do a custom 35mm sphere in walnut with a flat bottom? I need it for a project.'},{dir:'out',text:'Hi Laura! Yes, we can make a 35mm walnut sphere with flat ends. Let me get you a quote.'},{dir:'in',text:'That would be great, how long would it take?'}]},
@@ -1329,7 +1461,28 @@ function getProdIcon(type) {
 }
 
 function renderProduction(){
+  // Auto-build if empty and we have orders
+  if (!PROD_DATA.length && ORDERS.length) buildProdData();
+
   let html='';
+  if (!PROD_DATA.length) {
+    html = '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:28px;margin-bottom:12px">📋</div><div style="font-size:13px">No production items yet.<br>Orders will appear here once loaded from ShipStation / Zoho.</div></div>';
+    document.getElementById('productionView').innerHTML=html;
+    return;
+  }
+
+  // Summary bar
+  const totalItems = PROD_DATA.reduce((s,g) => s + g.items.length, 0);
+  const totalUnits = PROD_DATA.reduce((s,g) => s + g.items.reduce((ss,i) => ss + i.qty, 0), 0);
+  const completedUnits = PROD_DATA.reduce((s,g) => s + g.items.filter(i => i.checks.every(Boolean)).reduce((ss,i) => ss + i.qty, 0), 0);
+  const activeOrders = ORDERS.filter(o => !['shipped','delivered','cancelled'].includes(o.status)).length;
+  html += `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted)">
+    <span>📦 <strong style="color:var(--text-dim)">${totalUnits}</strong> units across <strong style="color:var(--text-dim)">${totalItems}</strong> line items</span>
+    <span>📋 From <strong style="color:var(--text-dim)">${activeOrders}</strong> active orders</span>
+    <span>✅ <strong style="color:var(--fw-green)">${completedUnits}</strong> units completed</span>
+    <span style="margin-left:auto;color:${liveOrdersLoaded?'var(--fw-green)':'var(--fw-amber)'}">● ${liveOrdersLoaded?'Live data':'Demo data'}</span>
+  </div>`;
+
   PROD_DATA.forEach((group,gIdx)=>{
     const items=hideCompleted?group.items.filter(i=>!i.checks.every(Boolean)):group.items;
     if(!items.length) return;
@@ -1373,12 +1526,25 @@ function renderProduction(){
         timeBadge = `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">⚠ No time data for this product/size</div>`;
       }
 
+      // Order reference badges
+      let orderBadges = '';
+      if (item.orders && item.orders.length) {
+        const sortedOrders = [...item.orders].sort((a,b) => (a.due||'').localeCompare(b.due||''));
+        orderBadges = `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">${sortedOrders.map(o => {
+          const uc = o.due ? urgencyClass(o.due) : '';
+          const platformColors = {etsy:'#f56400',ebay:'#e53238',shopify:'#96bf48',amazon:'#ff9900',direct:'#5a90ae'};
+          const pc = platformColors[o.platform] || 'var(--text-muted)';
+          return `<span style="font-size:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 6px;color:var(--text-muted)" title="${o.customer}${o.due?' · Due '+o.due:''}"><span style="color:${pc}">●</span> ${o.id} <span style="opacity:.6">${o.customer.split(' ')[0]}</span>${o.due ? ` <span class="urgency ${uc}" style="font-size:9px;padding:0 3px">${urgencyLabel(o.due)}</span>` : ''}</span>`;
+        }).join('')}</div>`;
+      }
+
       html+=`<div class="prod-item">
         <div class="prod-item-top">
           <div>
             <div class="prod-item-title"><span>${item.qty}×</span>${item.size} ${group.type}</div>
             <div class="prod-item-vars">${item.vars}</div>
             ${timeBadge}
+            ${orderBadges}
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <div class="progress-bar" style="width:90px"><div class="progress-fill" style="width:${done/4*100}%"></div></div>
@@ -1398,6 +1564,7 @@ function renderProduction(){
 function toggleCheck(gIdx,itemIdx,ci,event){
   event.stopPropagation();
   PROD_DATA[gIdx].items[itemIdx].checks[ci]=event.target.checked;
+  saveProdChecks();
   renderProduction();
   updateBadges();
 }
@@ -1926,6 +2093,7 @@ function exportCSV(){
   a.download='farwinger-orders.csv';a.click();
 }
 
+buildProdData();
 renderOverview();
 fetchShipStationOrders();
 fetchZohoOrders();
