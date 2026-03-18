@@ -188,7 +188,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 .fulfil-stat { font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px; }
 .fulfil-stat .num { font-size:18px;font-weight:700;color:var(--text); }
 .fulfil-filters { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px; }
-.fulfil-filter { padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted);cursor:pointer;transition:all .15s; }
+.fulfil-filter { padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:11px;font-family:'DM Mono',monospace;color:var(--text-dim);cursor:pointer;transition:all .15s; }
 .fulfil-filter:hover { border-color:var(--fw-amber); }
 .fulfil-filter.active { background:rgba(212,134,26,.12);border-color:var(--fw-amber);color:var(--fw-amber); }
 .fulfil-item { background:var(--surface);border:1px solid var(--border);border-left:3px solid transparent;border-radius:10px;padding:14px 18px;margin-bottom:10px;transition:border-color .18s; }
@@ -1724,7 +1724,7 @@ function toggleCompletedProd(){
 }
 
 const fulfilStages=['A · Packaged','B · Labels','C · Dispatched','D · Arrived'];
-let fulfilFilter = 'all';
+let fulfilFilter = 'todo';
 
 // Persist fulfilment stages to localStorage
 function saveFulfilStages(){
