@@ -1796,7 +1796,11 @@ function renderFulfilment(){
     if (!scDeduped[key] || rank > (scDeduped[key]._rank||0)) scDeduped[key] = {...p, _rank: rank};
   });
   const scParcels = Object.values(scDeduped);
-  const scInTransit = scParcels.filter(p => { const m=(p.status?.message||'').toLowerCase(); return !m.includes('delivered') && !m.includes('cancelled'); });
+  // 6-week threshold: hide stale parcels that are probably delivered but tracking stopped updating
+  const SIX_WEEKS_MS = 42 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - SIX_WEEKS_MS;
+  function scParcelDate(p) { const d=p.date_created; if(!d)return 0; const pts=d.split('-'); return pts.length>=3?new Date(parseInt(pts[2]),parseInt(pts[1])-1,parseInt(pts[0])).getTime():0; }
+  const scInTransit = scParcels.filter(p => { const m=(p.status?.message||'').toLowerCase(); return !m.includes('delivered') && !m.includes('cancelled') && scParcelDate(p) > cutoff; });
   const scDelivered = scParcels.filter(p => (p.status?.message||'').toLowerCase().includes('delivered'));
 
   // Update counts to include SC-only parcels
