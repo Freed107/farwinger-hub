@@ -184,15 +184,28 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 .check-item.checked { color:var(--green); }
 
 /* ─── FULFILMENT ─── */
+.fulfil-summary { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin-bottom:14px;display:flex;gap:20px;align-items:center;flex-wrap:wrap; }
+.fulfil-stat { font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px; }
+.fulfil-stat .num { font-size:18px;font-weight:700;color:var(--text); }
+.fulfil-filters { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px; }
+.fulfil-filter { padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted);cursor:pointer;transition:all .15s; }
+.fulfil-filter:hover { border-color:var(--fw-amber); }
+.fulfil-filter.active { background:rgba(212,134,26,.12);border-color:var(--fw-amber);color:var(--fw-amber); }
 .fulfil-item { background:var(--surface);border:1px solid var(--border);border-left:3px solid transparent;border-radius:10px;padding:14px 18px;margin-bottom:10px;transition:border-color .18s; }
 .fulfil-item.urgent-red { border-left-color:var(--red); }
 .fulfil-item.urgent-amber { border-left-color:var(--amber); }
 .fulfil-item.has-issue { border-left-color:var(--red); }
+.fulfil-item.stage-shipped { border-left-color:var(--green); }
+.fulfil-item.stage-delivered { border-left-color:var(--fw-blue);opacity:.7; }
 .fulfil-top { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px; }
 .fulfil-customer { font-size:14px;font-weight:600;margin-bottom:2px; }
 .fulfil-item-name { font-size:12px;color:var(--text-dim); }
 .fulfil-meta { display:flex;gap:7px;align-items:center;flex-wrap:wrap; }
 .fulfil-stages { display:flex;gap:6px;align-items:center;flex-wrap:wrap; }
+.fulfil-tracking { display:flex;align-items:center;gap:8px;margin-top:8px;padding:7px 12px;background:var(--surface2);border-radius:7px;font-size:11px;font-family:'DM Mono',monospace;color:var(--text-dim); }
+.fulfil-tracking a { color:var(--fw-blue);text-decoration:none; }
+.fulfil-tracking a:hover { text-decoration:underline; }
+.fulfil-address { font-size:11px;color:var(--text-muted);margin-top:6px;font-family:'DM Mono',monospace; }
 .stage { display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted);cursor:pointer;transition:all .18s; }
 .stage.done { background:rgba(93,187,122,.1);border-color:rgba(93,187,122,.25);color:var(--green); }
 .stage.active { background:rgba(212,134,26,.1);border-color:rgba(212,134,26,.3);color:var(--fw-amber); }
@@ -385,7 +398,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <!-- TAB C: FULFILMENT -->
     <div class="view" id="view-fulfilment">
       <div class="section-head">
-        <div><div class="section-title">Fulfilment</div><div class="section-sub">Per-order dispatch · platform-aware deadlines</div></div>
+        <div><div class="section-title">Fulfilment</div><div class="section-sub">Per-order dispatch · platform-aware deadlines · SendCloud tracking</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px">
           <span class="urgency green">● 10+ days</span>
           <span class="urgency amber">● 5–10 days</span>
@@ -393,6 +406,8 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
           <span class="urgency black">● overdue</span>
         </div>
       </div>
+      <div id="fulfilSummary"></div>
+      <div id="fulfilFilters"></div>
       <div id="fulfilmentView"></div>
     </div>
 
@@ -1517,9 +1532,9 @@ function renderOrdersTable(search){
 
 function updateBadges(){
   document.getElementById('prodBadge').textContent=PROD_DATA.reduce((s,g)=>s+g.items.filter(i=>!i.checks.every(Boolean)).length,0);
-  const urgent=ORDERS.filter(o=>!['delivered','cancelled'].includes(o.status)&&['red','black'].includes(urgencyClass(o.due))).length;
-  document.getElementById('fulfilBadge').textContent=urgent;
-  document.getElementById('fulfilBadge').className='nav-badge'+(urgent>0?' urgent':'');
+  const needsAction=ORDERS.filter(o=>o.status!=='cancelled'&&getEffectiveStage(o)<3&&['red','black'].includes(urgencyClass(o.due))).length;
+  document.getElementById('fulfilBadge').textContent=needsAction;
+  document.getElementById('fulfilBadge').className='nav-badge'+(needsAction>0?' urgent':'');
 }
 
 const checkLabels=['Material in stock','Material prepared','Item machined','Item completed'];
@@ -1709,35 +1724,158 @@ function toggleCompletedProd(){
 }
 
 const fulfilStages=['A · Packaged','B · Labels','C · Dispatched','D · Arrived'];
+let fulfilFilter = 'all';
+
+// Persist fulfilment stages to localStorage
+function saveFulfilStages(){
+  try { localStorage.setItem('farwinger_fulfil_stages', JSON.stringify(orderStages)); } catch(e){}
+}
+function loadFulfilStages(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('farwinger_fulfil_stages') || '{}');
+    Object.assign(orderStages, saved);
+  } catch(e){}
+}
+loadFulfilStages();
+
+// Map SendCloud status to fulfilment stage index
+// _sendcloud shape: { status: 'Parcel en route', statusId: 11, tracking: '...', trackingUrl: '...', carrier: 'dpd_gb', shipment: '...', dateCreated: '...' }
+function scStatusToStage(sc) {
+  if (!sc) return -1;
+  const msg = (sc.status || '').toLowerCase();
+  const id = sc.statusId || 0;
+  // SendCloud status IDs: 1=announced, 2=en route to sorting, 3=delivered, 4=sorted, 5=not sorted
+  // 6=handed to courier, 7=not deliverable, 8=delivered, 11=en route, 12=collected, 22=at sorting, 62=being announced
+  if (id === 3 || id === 8 || msg.includes('delivered')) return 4; // past Arrived
+  if (id === 6 || id === 11 || id === 22 || id === 4 || msg.includes('en route') || msg.includes('sorting') || msg.includes('transit') || msg.includes('handed to courier')) return 3; // Dispatched done
+  if (id === 62 || id === 1 || id === 12 || msg.includes('announced') || msg.includes('ready to send') || msg.includes('collected')) return 2; // Labels done
+  return -1; // unknown, don't override
+}
+
+function getEffectiveStage(order) {
+  let manual = orderStages[order.id] || 0;
+  // If SendCloud has better data, use the higher stage
+  if (order._sendcloud) {
+    const scStage = scStatusToStage(order._sendcloud);
+    if (scStage > manual) manual = scStage;
+  }
+  // If order status is shipped/delivered, ensure minimum stage
+  if (order.status === 'shipped' && manual < 3) manual = 3;
+  if (order.status === 'delivered' && manual < 4) manual = 4;
+  return manual;
+}
 
 function renderFulfilment(){
-  const active=ORDERS.filter(o=>!['delivered','cancelled'].includes(o.status)).sort((a,b)=>new Date(a.due)-new Date(b.due));
-  document.getElementById('fulfilmentView').innerHTML=active.map(o=>{
+  const all = ORDERS.filter(o => o.status !== 'cancelled').sort((a,b) => {
+    // Sort: incomplete first (by urgency), then completed
+    const sa = getEffectiveStage(a), sb = getEffectiveStage(b);
+    const doneA = sa >= 4, doneB = sb >= 4;
+    if (doneA !== doneB) return doneA ? 1 : -1;
+    return new Date(a.due) - new Date(b.due);
+  });
+
+  // Count per stage
+  const counts = { all: all.length, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+  all.forEach(o => { const s = Math.min(getEffectiveStage(o), 4); counts[s]++; });
+
+  // Summary bar
+  document.getElementById('fulfilSummary').innerHTML = `
+    <div class="fulfil-summary">
+      <div class="fulfil-stat"><span class="num">${counts.all}</span> orders</div>
+      <div class="fulfil-stat" style="color:var(--text-muted)">│</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--fw-amber)">${counts[0]}</span> awaiting packaging</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--fw-amber)">${counts[1]}</span> need labels</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--fw-blue)">${counts[2]+counts[3]}</span> dispatched / in transit</div>
+      <div class="fulfil-stat"><span class="num" style="color:var(--green)">${counts[4]}</span> delivered</div>
+      ${sendcloudLoaded ? '<div style="margin-left:auto;font-size:10px;color:var(--green);font-family:\'DM Mono\',monospace">● SendCloud synced</div>' : ''}
+    </div>`;
+
+  // Filter buttons
+  const filterLabels = [
+    ['all', `All (${counts.all})`],
+    ['todo', `To do (${counts[0]+counts[1]})`],
+    ['transit', `In transit (${counts[2]+counts[3]})`],
+    ['delivered', `Delivered (${counts[4]})`],
+    ['issues', `Issues`]
+  ];
+  document.getElementById('fulfilFilters').innerHTML = `<div class="fulfil-filters">${filterLabels.map(([k,l]) =>
+    `<div class="fulfil-filter ${fulfilFilter===k?'active':''}" onclick="fulfilFilter='${k}';renderFulfilment()">${l}</div>`
+  ).join('')}</div>`;
+
+  // Filter orders
+  let filtered = all;
+  if (fulfilFilter === 'todo') filtered = all.filter(o => getEffectiveStage(o) < 2);
+  else if (fulfilFilter === 'transit') filtered = all.filter(o => { const s=getEffectiveStage(o); return s>=2 && s<4; });
+  else if (fulfilFilter === 'delivered') filtered = all.filter(o => getEffectiveStage(o) >= 4);
+  else if (fulfilFilter === 'issues') filtered = all.filter(o => !o.phone || !o.email || !o.address);
+
+  // Render cards
+  document.getElementById('fulfilmentView').innerHTML = filtered.length === 0
+    ? '<div style="text-align:center;padding:40px;color:var(--text-muted);font-family:\'DM Mono\',monospace;font-size:13px">No orders in this category</div>'
+    : filtered.map(o => {
     const m=[];if(!o.phone)m.push('Phone');if(!o.email)m.push('Email');if(!o.address)m.push('Address');
-    const stage=orderStages[o.id]||0;
-    const uc=urgencyClass(o.due);
-    return`<div class="fulfil-item ${m.length?'has-issue':uc==='red'?'urgent-red':uc==='amber'?'urgent-amber':''}">
+    const stage = getEffectiveStage(o);
+    const uc = urgencyClass(o.due);
+    const isDelivered = stage >= 4;
+    const isShipped = stage >= 3 && !isDelivered;
+    const sc = o._sendcloud;
+    const addr = o._raw?.shipTo;
+
+    // Tracking info
+    let trackingHtml = '';
+    if (sc && sc.tracking) {
+      const trackUrl = sc.trackingUrl || `https://tracking.sendcloud.sc/${sc.tracking}`;
+      trackingHtml = `<div class="fulfil-tracking">
+        <span style="font-weight:600">${(sc.carrier || 'Carrier').toUpperCase().replace('_GB','').replace('_','-')}</span>
+        <a href="${trackUrl}" target="_blank" rel="noopener">📦 ${sc.tracking}</a>
+        <span style="color:${isDelivered?'var(--green)':isShipped?'var(--fw-blue)':'var(--text-muted)'}">${sc.status || ''}</span>
+        ${sc.dateCreated ? `<span style="margin-left:auto">${(()=>{const p=sc.dateCreated.split('-');return p.length>=3?p[0]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1])-1]:sc.dateCreated.substring(0,10)})()}</span>` : ''}
+      </div>`;
+    }
+
+    // Address line
+    let addrHtml = '';
+    if (addr) {
+      const parts = [addr.street1, addr.city, addr.state, addr.postalCode, addr.country].filter(Boolean);
+      addrHtml = `<div class="fulfil-address">📍 ${parts.join(', ')}</div>`;
+    }
+
+    return`<div class="fulfil-item ${isDelivered?'stage-delivered':isShipped?'stage-shipped':m.length?'has-issue':uc==='red'?'urgent-red':uc==='amber'?'urgent-amber':''}">
       <div class="fulfil-top">
         <div>
           <div class="fulfil-customer">${o.country} ${o.customer}</div>
           <div class="fulfil-item-name">${o.item}</div>
+          ${addrHtml}
           ${m.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${m.map(x=>`<span class="missing-tag">⚠ ${x} missing</span>`).join('')}</div>`:''}
         </div>
         <div class="fulfil-meta">
           <span class="ptag ${o.platform}">${PLATFORMS[o.platform]?.label}</span>
           <span class="urgency ${uc}">${urgencyLabel(o.due)}</span>
           <span class="order-id">${o.id}</span>
+          ${o.total?`<span style="font-size:12px;font-weight:600;color:var(--text)">£${o.total.toFixed(2)}</span>`:''}
         </div>
       </div>
       <div class="fulfil-stages">
-        ${fulfilStages.map((s,i)=>`<div class="stage ${i<stage?'done':i===stage?'active':''}" onclick="advanceStage('${o.id}',${i},${stage})">${i<stage?'✓ ':''} ${s}</div>`).join('')}
+        ${fulfilStages.map((s,i)=>`<div class="stage ${i<stage?'done':i===stage?'active':''}" onclick="advanceFulfilStage('${o.id}',${i},${stage})">${i<stage?'✓ ':''} ${s}</div>`).join('')}
         ${m.length?`<span class="flag" onclick="openTroubleshooting('${o.id}')">⚠ Troubleshoot</span>`:''}
       </div>
+      ${trackingHtml}
     </div>`;
   }).join('');
 }
 
-function advanceStage(id,i,current){if(i===current){orderStages[id]=current+1;renderFulfilment();}}
+function advanceFulfilStage(id, clickedIdx, currentStage) {
+  if (clickedIdx === currentStage) {
+    orderStages[id] = currentStage + 1;
+    saveFulfilStages();
+    renderFulfilment();
+  } else if (clickedIdx < currentStage) {
+    // Allow clicking a completed stage to revert to it
+    orderStages[id] = clickedIdx;
+    saveFulfilStages();
+    renderFulfilment();
+  }
+}
 
 function openTroubleshooting(id){
   const o=ORDERS.find(x=>x.id===id);if(!o)return;
