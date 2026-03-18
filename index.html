@@ -1226,7 +1226,10 @@ function buildProdData() {
   lineItems.forEach(li => {
     const type = detectType(li.name);
     const size = extractSize(li.name, li.sku);
-    const wood = detectWood(li.name) || 'Unknown';
+    let wood = detectWood(li.name);
+    // Default wood for multi-component products
+    if (!wood && (type === 'Multi Stack Leg' || type === 'Bun Stack Leg')) wood = 'Mixed';
+    wood = wood || 'Unknown';
     const variant = extractVars(li.name);
 
     if (!type) { unparsed.push(li); return; }
@@ -1246,7 +1249,7 @@ function buildProdData() {
   });
 
   // Sort types by predefined order, then build PROD_DATA
-  const typeOrder = ['Ball','Hemisphere','Half Button','Bun Stack Leg','Multi Stack Leg','Cylinder','Cone'];
+  const typeOrder = ['Ball','Hemisphere','Half Button','Bun Stack Leg','Multi Stack Leg','Cylinder','Cone','Cube'];
   const result = [];
   typeOrder.forEach(type => {
     if (!groups[type]) return;
