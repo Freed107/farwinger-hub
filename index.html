@@ -524,6 +524,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 
 <script>
 const PLATFORMS={etsy:{color:'var(--etsy)',label:'Etsy'},ebay:{color:'var(--ebay)',label:'eBay'},shopify:{color:'var(--shopify)',label:'Shopify'},amazon:{color:'var(--amazon)',label:'Amazon'},tiktok:{color:'var(--tiktok)',label:'TikTok Shop'},direct:{color:'var(--fw-blue-light)',label:'Direct'}};
+function countryFlag(code){if(!code)return '';const c=code.toLowerCase();return `<img src="https://flagcdn.com/20x15/${c}.png" width="20" height="15" alt="${code}" style="vertical-align:middle;border-radius:2px;margin-right:2px">`;}
 const today=new Date();
 function daysFrom(d){return Math.round((new Date(d)-today)/(864e5));}
 
@@ -649,7 +650,7 @@ function mapZohoDoc(doc, type) {
     due: dueDate || '',
     amount: parseFloat(doc.total || 0),
     status: status,
-    country: '🇬🇧',
+    country: countryFlag('GB'),
     phone: !!(doc.contact_id),
     email: !!(doc.email),
     address: !!(doc.shipping_address),
@@ -1083,8 +1084,7 @@ function mapSSOrder(o) {
 
   const addr = o.shipTo || {};
   const countryCode = addr.country || '';
-  const flagMap = {GB:'🇬🇧',US:'🇺🇸',DE:'🇩🇪',FR:'🇫🇷',NL:'🇳🇱',AU:'🇦🇺',CA:'🇨🇦',PL:'🇵🇱',IT:'🇮🇹',ES:'🇪🇸',SE:'🇸🇪',DK:'🇩🇰',NO:'🇳🇴',BE:'🇧🇪',CH:'🇨🇭',AT:'🇦🇹',JP:'🇯🇵',CN:'🇨🇳'};
-  const flag = flagMap[countryCode] || '🌍';
+  const flag = countryFlag(countryCode);
 
   return {
     id: platform.toUpperCase().slice(0,3) + '-' + o.orderNumber,
@@ -1848,12 +1848,12 @@ function renderFulfilment(){
     const addr = [p.address, p.city, p.postal_code, p.country?.iso_2].filter(Boolean).join(', ');
     const itemDesc = p.parcel_items?.map(i => i.description).join(', ') || p.order_number;
     const dateStr = p.date_created ? (()=>{const pts=p.date_created.split('-');return pts.length>=3?pts[0]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(pts[1])-1]:p.date_created.substring(0,10)})() : '';
-    const countryFlag = p.country?.iso_2 ? String.fromCodePoint(...[...p.country.iso_2.toUpperCase()].map(c=>0x1F1E6+c.charCodeAt(0)-65)) : '';
+    const flag = countryFlag(p.country?.iso_2 || '');
 
     return `<div class="fulfil-item ${isDel?'stage-delivered':isEnRoute?'stage-shipped':''}">
       <div class="fulfil-top">
         <div>
-          <div class="fulfil-customer">${countryFlag} ${p.name||'Unknown'}</div>
+          <div class="fulfil-customer">${flag} ${p.name||'Unknown'}</div>
           <div class="fulfil-item-name">${itemDesc}</div>
           ${addr?`<div class="fulfil-address">📍 ${addr}</div>`:''}
         </div>
