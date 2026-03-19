@@ -386,7 +386,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
     <!-- TAB B: PRODUCTION -->
     <div class="view" id="view-production">
       <div class="section-head">
-        <div><div class="section-title">Production Queue</div><div class="section-sub">Built from live orders · grouped by product type · checkboxes saved locally</div></div>
+        <div><div class="section-title">Production Queue</div><div class="section-sub">Built from live orders · grouped by product type · progress synced to cloud</div></div>
         <div style="display:flex;gap:6px">
           <button class="btn" onclick="buildProdData().then(()=>{renderProduction();updateBadges();showBanner('✓ Production queue rebuilt from orders','success');setTimeout(hideBanner,3000)})" title="Rebuild production queue from current orders">⟳ Rebuild</button>
           <button class="btn" onclick="toggleCompletedProd()" id="hideBtn">☑ Hide completed</button>
