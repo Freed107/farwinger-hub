@@ -388,7 +388,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
       <div class="section-head">
         <div><div class="section-title">Production Queue</div><div class="section-sub">Built from live orders · grouped by product type · checkboxes saved locally</div></div>
         <div style="display:flex;gap:6px">
-          <button class="btn" onclick="buildProdData();renderProduction();updateBadges();showBanner('✓ Production queue rebuilt from orders','success');setTimeout(hideBanner,3000)" title="Rebuild production queue from current orders">⟳ Rebuild</button>
+          <button class="btn" onclick="buildProdData().then(()=>{renderProduction();updateBadges();showBanner('✓ Production queue rebuilt from orders','success');setTimeout(hideBanner,3000)})" title="Rebuild production queue from current orders">⟳ Rebuild</button>
           <button class="btn" onclick="toggleCompletedProd()" id="hideBtn">☑ Hide completed</button>
         </div>
       </div>
@@ -530,6 +530,25 @@ function daysFrom(d){return Math.round((new Date(d)-today)/(864e5));}
 
 // ── Live API Config ──────────────────────────────────────────────
 const PROXY = 'https://farwinger-proxy.fredwalkers.workers.dev';
+
+// ── Cloud State (KV via proxy) ──────────────────────────────────────
+async function stateGet(key) {
+  try {
+    const r = await fetch(PROXY + '/state/get?key=' + encodeURIComponent(key));
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    console.warn('[State] GET failed for', key, e);
+    try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch(e2){ return {}; }
+  }
+}
+async function statePut(key, value) {
+  const json = JSON.stringify(value);
+  localStorage.setItem(key, json); // local cache first
+  try {
+    await fetch(PROXY + '/state/put?key=' + encodeURIComponent(key), { method: 'PUT', body: json });
+  } catch(e) { console.warn('[State] PUT failed for', key, e); }
+}
 
 // ── Anthropic API key (stored in localStorage) ─────────────────────
 function getAnthropicKey() { return localStorage.getItem('farwinger_anthropic_key') || ''; }
@@ -680,7 +699,7 @@ async function fetchZohoOrders() {
     nonDirect.forEach(o => ORDERS.push(o));
     zohoOrders.forEach(o => ORDERS.push(o));
 
-    buildProdData();
+    await buildProdData();
     renderAll();
     const count = zohoOrders.length;
     showBanner(`✓ Loaded ${count} Zoho direct order${count !== 1 ? 's' : ''} (${invoices.length} invoice${invoices.length !== 1 ? 's' : ''}, ${estimates.length} quote${estimates.length !== 1 ? 's' : ''})`, 'success');
@@ -760,7 +779,7 @@ async function fetchSendCloudParcels() {
 
     // Rebuild production data if statuses changed (shipped items leave the queue)
     if (updated > 0) {
-      buildProdData();
+      await buildProdData();
       renderAll();
     }
 
@@ -1160,7 +1179,7 @@ async function fetchShipStationOrders() {
     if (statusEl) { statusEl.textContent = '● live · ' + liveOrders.length; statusEl.style.color = '#7ad47a'; }
     showBanner(`✓ Loaded ${liveOrders.length} live orders from ShipStation`, 'success');
     setTimeout(hideBanner, 4000);
-    buildProdData();
+    await buildProdData();
     renderAll();
   } catch(err) {
     loadingLive = false;
@@ -1216,7 +1235,7 @@ const ORDERS=[
 let PROD_DATA=[];
 
 // ── Parse order items into production queue ──────────────────────
-function buildProdData() {
+async function buildProdData() {
   // Product type detection — order matters (multi-word first)
   const typePatterns = [
     { type: 'Multi Stack Leg', re: [/multi[\s-]?stack/i, /\d[\s-]?ball[\s-]?stack/i, /multi[\s-]?leg/i, /stack\s*furniture\s*leg/i] },
@@ -1373,31 +1392,30 @@ function buildProdData() {
     }))});
   }
 
-  // Restore checkbox state from localStorage
-  const saved = localStorage.getItem('farwinger_prod_checks');
-  if (saved) {
-    try {
-      const map = JSON.parse(saved);
+  // Restore checkbox state from cloud KV (with localStorage fallback)
+  try {
+    const map = await stateGet('farwinger_prod_checks');
+    if (map && Object.keys(map).length) {
       result.forEach(g => g.items.forEach(item => {
         const k = g.type + '|' + item.size + '|' + item.vars;
         if (map[k]) item.checks = map[k];
       }));
-    } catch(e) {}
-  }
+    }
+  } catch(e) {}
 
   PROD_DATA = result;
   console.log(`[Production] Built ${result.reduce((s,g)=>s+g.items.length,0)} production items from ${activeOrders.length} active orders (${unparsed.length} unparsed)`);
   return result;
 }
 
-// ── Save checkbox state to localStorage ──────────────────────────
+// ── Save checkbox state to cloud KV ──────────────────────────────
 function saveProdChecks() {
   const map = {};
   PROD_DATA.forEach(g => g.items.forEach(item => {
     const k = g.type + '|' + item.size + '|' + item.vars;
     map[k] = item.checks;
   }));
-  localStorage.setItem('farwinger_prod_checks', JSON.stringify(map));
+  statePut('farwinger_prod_checks', map);
 }
 
 const CS_MESSAGES=[
@@ -1608,9 +1626,9 @@ function getProdIcon(type) {
   return PROD_ICONS[type] || null;
 }
 
-function renderProduction(){
+async function renderProduction(){
   // Auto-build if empty and we have orders
-  if (!PROD_DATA.length && ORDERS.length) buildProdData();
+  if (!PROD_DATA.length && ORDERS.length) await buildProdData();
 
   let html='';
   if (!PROD_DATA.length) {
@@ -1726,14 +1744,14 @@ function toggleCompletedProd(){
 const fulfilStages=['A · Packaged','B · Labels','C · Dispatched','D · Arrived'];
 let fulfilFilter = 'todo';
 
-// Persist fulfilment stages to localStorage
+// Persist fulfilment stages to cloud KV
 function saveFulfilStages(){
-  try { localStorage.setItem('farwinger_fulfil_stages', JSON.stringify(orderStages)); } catch(e){}
+  statePut('farwinger_fulfil_stages', orderStages);
 }
-function loadFulfilStages(){
+async function loadFulfilStages(){
   try {
-    const saved = JSON.parse(localStorage.getItem('farwinger_fulfil_stages') || '{}');
-    Object.assign(orderStages, saved);
+    const saved = await stateGet('farwinger_fulfil_stages');
+    if (saved && Object.keys(saved).length) Object.assign(orderStages, saved);
   } catch(e){}
 }
 loadFulfilStages();
