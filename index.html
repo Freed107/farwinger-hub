@@ -252,7 +252,7 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 .overlay.show { opacity:1;pointer-events:all; }
 .side-panel { position:fixed;top:0;right:-440px;width:420px;height:100vh;background:var(--surface);border-left:1px solid var(--border);z-index:99;transition:right .32s cubic-bezier(.16,1,.3,1);overflow-y:auto;padding:24px; }
 .side-panel.open { right:0; }
-.panel-close { position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s; }
+.panel-close { position:absolute;top:12px;right:12px;width:40px;height:40px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .18s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;z-index:10; }
 .panel-close:hover { background:var(--border2);color:var(--fw-amber); }
 .panel-title { font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:3px;padding-right:36px; }
 .panel-sub { font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);margin-bottom:20px; }
@@ -279,9 +279,9 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
 </head>
 <body>
 
-<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="overlay" id="overlay" onclick="closePanel()" ontouchend="event.preventDefault();closePanel()"></div>
 <div class="side-panel" id="sidePanel">
-  <button class="panel-close" onclick="closePanel()">✕</button>
+  <button class="panel-close" onclick="closePanel()" ontouchend="event.preventDefault();closePanel()">✕</button>
   <div id="panelContent"></div>
 </div>
 
