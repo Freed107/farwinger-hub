@@ -1272,30 +1272,44 @@ async function buildProdData() {
     return null;
   }
 
-  // Extract size in mm — handles: "140mm", "14cm", "5.51 inch / 14cm", SKU "FW-ORB-WNT-140" or "D230"
-  function extractSize(nameStr, skuStr) {
+  // Extract size in mm — handles: options array (selected variant), "140mm", "14cm", "5.51 inch / 14cm", SKU
+  function extractSize(nameStr, skuStr, optionsArr) {
     const s = String(nameStr || '');
     const sku = String(skuStr || '');
+    // 0. Check ShipStation item options first (selected variant — most accurate for multi-size listings)
+    if (optionsArr && optionsArr.length) {
+      for (const opt of optionsArr) {
+        const v = String(opt.value || '');
+        let m = v.match(/(\d{1,3})\s*cm/i);
+        if (m) return parseInt(m[1]) * 10;
+        m = v.match(/(\d{2,3})\s*mm/i);
+        if (m) return parseInt(m[1]);
+        m = v.match(/([\d.]+)\s*inch/i);
+        if (m) return Math.round(parseFloat(m[1]) * 25.4);
+      }
+    }
     // 1. Direct mm: "140mm"
     let m = s.match(/(\d{2,3})\s*mm\b/i);
     if (m) return parseInt(m[1]);
-    // 2. cm: "14cm" → 140mm (look for the specific diameter mention)
+    // 2. cm: "14cm" → 140mm (look for the specific diameter mention, not a range)
     m = s.match(/(\d{1,3})\s*cm\s*diameter/i);
-    if (m) return parseInt(m[1]) * 10;
+    if (m && !/\d+\s*cm\s*to\s*\d+\s*cm/i.test(s)) return parseInt(m[1]) * 10;
     // 3. "X inch / Ycm" format
     m = s.match(/[\d.]+\s*inch\s*\/\s*(\d{1,3})\s*cm/i);
     if (m) return parseInt(m[1]) * 10;
     // 4. Generic cm (not in a range like "6cm to 34cm")
     m = s.match(/(?<!\d\s*cm\s*to\s*)(\d{1,3})\s*cm(?!\s*to)/i);
-    if (m) return parseInt(m[1]) * 10;
+    if (m && !/\d+\s*cm\s*to\s*\d+\s*cm/i.test(s)) return parseInt(m[1]) * 10;
     // 5. SKU: "FW-ORB-WNT-140" or "D230"
     m = sku.match(/[_-](\d{2,3})(?:[_-]|$)/);
     if (m) return parseInt(m[1]);
     m = sku.match(/D(\d{2,3})/i);
     if (m) return parseInt(m[1]);
-    // 6. Any remaining cm in name
-    m = s.match(/(\d{1,3})\s*cm/i);
-    if (m) return parseInt(m[1]) * 10;
+    // 6. Any remaining cm in name (only if NOT a range)
+    if (!/\d+\s*cm\s*to\s*\d+\s*cm/i.test(s)) {
+      m = s.match(/(\d{1,3})\s*cm/i);
+      if (m) return parseInt(m[1]) * 10;
+    }
     return null;
   }
 
@@ -1326,6 +1340,7 @@ async function buildProdData() {
           name: ri.name || ri.sku || '',
           qty:  ri.quantity || 1,
           sku:  ri.sku || '',
+          options: ri.options || [],
           orderId: order.id,
           customer: order.customer,
           due: order.due,
@@ -1346,7 +1361,7 @@ async function buildProdData() {
 
   lineItems.forEach(li => {
     const type = detectType(li.name);
-    const size = extractSize(li.name, li.sku);
+    const size = extractSize(li.name, li.sku, li.options);
     let wood = detectWood(li.name);
     // Default wood for multi-component products
     if (!wood && (type === 'Multi Stack Leg' || type === 'Bun Stack Leg')) wood = 'Mixed';
