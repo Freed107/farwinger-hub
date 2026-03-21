@@ -2054,7 +2054,13 @@ let phoneRequestsDrafted = JSON.parse(localStorage.getItem('farwinger_phone_draf
 
 function getIntlOrdersMissingPhone() {
   return ORDERS.filter(o => {
+    // Skip shipped, delivered, cancelled orders
     if (['shipped','delivered','cancelled'].includes(o.status)) return false;
+    // Skip orders that SendCloud shows as shipped/delivered
+    if (o._sendcloud) return false;
+    // Skip orders already at dispatch stage or beyond in fulfilment
+    const stage = getEffectiveStage(o);
+    if (stage >= 3) return false;
     const addr = o._raw?.shipTo;
     if (!addr) return false;
     const cc = (addr.country || '').toUpperCase();
