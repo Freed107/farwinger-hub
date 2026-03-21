@@ -2092,8 +2092,12 @@ function requestPhoneViaEmail(orderId) {
   const firstName = (o.customer || '').split(/\s+/)[0] || 'Customer';
   const country = o._raw?.shipTo?.country || '';
   const orderNum = o._raw?.orderNumber || o.id;
-  const subject = encodeURIComponent(`Farwinger Order ${orderNum} — Phone number needed for international delivery`);
-  const body = encodeURIComponent(`Dear ${firstName},\n\nThank you for your order with Farwinger!\n\nAs your order is being shipped internationally${country ? ' to ' + country : ''}, we require a contact phone number for the courier. This is a standard requirement for customs clearance and delivery — the courier may need to reach you to arrange delivery.\n\nCould you please reply to this email with your phone number (including country code)?\n\nFor example: +49 123 456 7890\n\nMany thanks,\nFred\nFarwinger — Bespoke Wooden Products\nwww.farwinger.com`);
+  const countryNames = {DE:'Germany',NL:'the Netherlands',US:'the US',FR:'France',PT:'Portugal',ES:'Spain',IT:'Italy',BE:'Belgium',AT:'Austria',CH:'Switzerland',SE:'Sweden',DK:'Denmark',NO:'Norway',PL:'Poland',IE:'Ireland',CA:'Canada',AU:'Australia',JP:'Japan',KR:'South Korea',SG:'Singapore',AE:'the UAE',SA:'Saudi Arabia',IL:'Israel',BR:'Brazil',MX:'Mexico',IN:'India',CN:'China',NZ:'New Zealand'};
+  const countryName = countryNames[country] || country;
+  const phoneExamples = {DE:'+49 123 456 7890',NL:'+31 6 1234 5678',US:'+1 555 123 4567',FR:'+33 6 12 34 56 78',PT:'+351 912 345 678',CA:'+1 555 123 4567',AU:'+61 4 1234 5678'};
+  const phoneExample = phoneExamples[country] || '+' + country + ' 123 456 7890';
+  const subject = encodeURIComponent(`Farwinger Order ${orderNum} — Phone number for international delivery`);
+  const body = encodeURIComponent(`Dear ${firstName},\n\nThank you for your order with Farwinger!\n\nAs your order is being shipped internationally to ${countryName}, we'd love a contact phone number for the courier. This would make it easier for the courier to reach you in case they have difficulties, and will help us to ensure your delivery experience will be smooth and without issues.\n\nCould you please reply to this email with your phone number (including country code) if that's okay with you?\n\nFor example: ${phoneExample}\n\nMany thanks,\nMichael.\n\n--\nMichael Farwinger\nFarwinger Limited\nE: michael@farwinger.com\nM: +44(0)7572532081\nA: Farwinger Limited, Bradford Court Business Centre, 123 - 131 Bradford Street, Digbeth, Birmingham, B12 0NS, United Kingdom\nwww.farwinger.com`);
   window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${subject}&body=${body}`, '_blank');
   markPhoneRequested(orderId, email, 'email');
 }
