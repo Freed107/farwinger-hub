@@ -1260,14 +1260,27 @@ async function buildProdData() {
     { wood: 'Mixed',            re: [/\bmixed\b/i] },
   ];
   function detectType(s)  { for (const t of typePatterns) if (t.re.some(r=>r.test(s))) return t.type; return null; }
-  function detectWood(s) {
-    // Check for variant suffix like "- Pine / Fully round" (Shopify format — most specific)
+  function detectWood(s, optionsArr) {
+    // 0. Check ShipStation item options first (selected variant — most accurate)
+    if (optionsArr && optionsArr.length) {
+      for (const opt of optionsArr) {
+        const oName = String(opt.name || '').toLowerCase();
+        if (oName.includes('wood') || oName.includes('material') || oName.includes('species')) {
+          const v = String(opt.value || '');
+          // Check against known wood patterns
+          for (const w of woodPatterns) if (w.re.some(r=>r.test(v))) return w.wood;
+          // If option value doesn't match known patterns, use it as-is (e.g. "Hardwood")
+          if (v.trim()) return v.trim();
+        }
+      }
+    }
+    // 1. Check for variant suffix like "- Pine / Fully round" (Shopify format)
     const variantMatch = s.match(/[-–]\s*([\w\s]+?)(?:\s*\/|$)/);
     if (variantMatch) {
       const variantWood = variantMatch[1].trim();
       for (const w of woodPatterns) if (w.re.some(r=>r.test(variantWood))) return w.wood;
     }
-    // Fall back to general detection
+    // 2. Fall back to general detection from name
     for (const w of woodPatterns) if (w.re.some(r=>r.test(s))) return w.wood;
     return null;
   }
@@ -1313,10 +1326,25 @@ async function buildProdData() {
     return null;
   }
 
-  function extractVars(s) {
+  function extractVars(s, optionsArr) {
     const v=[];
-    if (/flat[\s-]*(end|base|bottom)/i.test(s)) v.push('Flat ends');
-    if (/fully[\s-]?round/i.test(s)) v.push('Fully round');
+    // Check ShipStation options for mounting/shape
+    if (optionsArr && optionsArr.length) {
+      for (const opt of optionsArr) {
+        const oName = String(opt.name || '').toLowerCase();
+        const oVal = String(opt.value || '');
+        if (oName.includes('mount') || oName.includes('shape')) {
+          if (/flat/i.test(oVal)) v.push('Flat ends');
+          else if (/fully[\s-]?round/i.test(oVal)) v.push('Fully round');
+          else if (oVal.trim()) v.push(oVal.trim());
+        }
+      }
+    }
+    // Fall back to name parsing if options didn't provide info
+    if (!v.length) {
+      if (/flat[\s-]*(end|base|bottom)/i.test(s)) v.push('Flat ends');
+      if (/fully[\s-]?round/i.test(s)) v.push('Fully round');
+    }
     const dMatch = s.match(/dowel[\s-]*(\d+)\s*mm/i);
     if (dMatch) v.push('Dowel '+dMatch[1]+'mm');
     if (/\bpolished\b/i.test(s)) v.push('Polished');
@@ -1362,11 +1390,11 @@ async function buildProdData() {
   lineItems.forEach(li => {
     const type = detectType(li.name);
     const size = extractSize(li.name, li.sku, li.options);
-    let wood = detectWood(li.name);
-    // Default wood for multi-component products
+    let wood = detectWood(li.name, li.options);
+    // Default wood for multi-component products only if options didn't specify
     if (!wood && (type === 'Multi Stack Leg' || type === 'Bun Stack Leg')) wood = 'Mixed';
     wood = wood || 'Unknown';
-    const variant = extractVars(li.name);
+    const variant = extractVars(li.name, li.options);
 
     if (!type) { unparsed.push(li); return; }
 
