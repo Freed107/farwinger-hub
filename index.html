@@ -1966,7 +1966,24 @@ function renderFulfilment(){
           <div class="fulfil-customer">${o.country} ${o.customer}</div>
           <div class="fulfil-item-name">${o.item}</div>
           ${addrHtml}
-          ${m.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${m.map(x=>`<span class="missing-tag">⚠ ${x} missing</span>`).join('')}</div>`:''}
+          ${m.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${m.map(x=>{
+            if (x === 'Phone') {
+              const draft = phoneRequestsDrafted[o.id];
+              const email = o._raw?.customerEmail;
+              const cc = (o._raw?.shipTo?.country||'').toUpperCase();
+              const isIntl = cc && cc !== 'GB' && cc !== 'UK';
+              if (draft) return '<span class="missing-tag" style="background:rgba(74,127,158,.15);color:var(--fw-blue);border-color:var(--fw-blue)">📧 Phone requested · '+draft.date+(draft.method==='platform'?' ('+o.platform+')':'')+' </span>';
+              if (isIntl && email) {
+                return '<span class="missing-tag" style="background:rgba(245,200,66,.15);color:var(--fw-amber);border-color:var(--fw-amber);cursor:pointer" onclick="event.stopPropagation();requestPhoneViaEmail(\''+o.id+'\')">📱 Request phone via email</span>';
+              }
+              if (isIntl && !email) {
+                const msgUrl = o.platform==='ebay' ? getEbayMessageUrl() : getEtsyMessageUrl();
+                const pLabel = o.platform==='ebay' ? 'eBay' : 'Etsy';
+                return '<a href="'+msgUrl+'" target="_blank" rel="noopener" class="missing-tag" style="text-decoration:none;background:rgba(245,200,66,.15);color:var(--fw-amber);border-color:var(--fw-amber);cursor:pointer" onclick="event.stopPropagation();markPhoneRequested(\''+o.id+'\',\'\',\'platform\')">💬 Request phone via '+pLabel+'</a>';
+              }
+            }
+            return '<span class="missing-tag">⚠ '+x+' missing</span>';
+          }).join('')}</div>`:''}
         </div>
         <div class="fulfil-meta">
           <span class="ptag ${o.platform}">${PLATFORMS[o.platform]?.label}</span>
@@ -2029,6 +2046,64 @@ function openTroubleshooting(id){
     </div>
     <div class="note-box" style="margin-top:12px"><strong>Note:</strong> Resolved issues are archived in Firestore and disappear from this view.</div>`;
   openPanel();
+}
+
+// ── Phone Request Tracking for International Orders ───────────────
+let phoneRequestsDrafted = JSON.parse(localStorage.getItem('farwinger_phone_drafted') || '{}');
+// { "ORDER-ID": { email, date, method } }
+
+function getIntlOrdersMissingPhone() {
+  return ORDERS.filter(o => {
+    if (['shipped','delivered','cancelled'].includes(o.status)) return false;
+    const addr = o._raw?.shipTo;
+    if (!addr) return false;
+    const cc = (addr.country || '').toUpperCase();
+    if (!cc || cc === 'GB' || cc === 'UK') return false;
+    return !addr.phone;
+  });
+}
+
+function checkAndDraftPhoneRequests() {
+  const missing = getIntlOrdersMissingPhone();
+  if (!missing.length) return;
+
+  const needAction = missing.filter(o => !phoneRequestsDrafted[o.id]);
+  if (needAction.length > 0) {
+    showBanner(`📱 ${needAction.length} international order${needAction.length>1?'s':''} missing phone number${needAction.length>1?'s':''} — check Fulfilment tab`, 'info');
+    setTimeout(hideBanner, 8000);
+  }
+
+  // Re-render fulfilment if visible
+  const vf = document.getElementById('view-fulfilment');
+  if (vf && vf.classList.contains('active')) renderFulfilment();
+}
+
+function markPhoneRequested(orderId, email, method) {
+  phoneRequestsDrafted[orderId] = { email, date: new Date().toISOString().split('T')[0], method };
+  localStorage.setItem('farwinger_phone_drafted', JSON.stringify(phoneRequestsDrafted));
+  renderFulfilment();
+}
+
+function requestPhoneViaEmail(orderId) {
+  const o = ORDERS.find(x => x.id === orderId);
+  if (!o) return;
+  const email = o._raw?.customerEmail;
+  if (!email) return;
+  const firstName = (o.customer || '').split(/\s+/)[0] || 'Customer';
+  const country = o._raw?.shipTo?.country || '';
+  const orderNum = o._raw?.orderNumber || o.id;
+  const subject = encodeURIComponent(`Farwinger Order ${orderNum} — Phone number needed for international delivery`);
+  const body = encodeURIComponent(`Dear ${firstName},\n\nThank you for your order with Farwinger!\n\nAs your order is being shipped internationally${country ? ' to ' + country : ''}, we require a contact phone number for the courier. This is a standard requirement for customs clearance and delivery — the courier may need to reach you to arrange delivery.\n\nCould you please reply to this email with your phone number (including country code)?\n\nFor example: +49 123 456 7890\n\nMany thanks,\nFred\nFarwinger — Bespoke Wooden Products\nwww.farwinger.com`);
+  window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${subject}&body=${body}`, '_blank');
+  markPhoneRequested(orderId, email, 'email');
+}
+
+function getEtsyMessageUrl() {
+  return 'https://www.etsy.com/your/shops/Farwinger/conversations';
+}
+
+function getEbayMessageUrl() {
+  return 'https://www.ebay.co.uk/mys/overview';
 }
 
 // ── Google Calendar Integration ────────────────────────────────────
@@ -2505,7 +2580,7 @@ function exportCSV(){
 buildProdData();
 renderOverview();
 // Load orders then cross-reference with SendCloud
-Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels());
+Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels().then(() => checkAndDraftPhoneRequests().catch(e=>console.warn('Phone request check:', e))));
 // Check API key status on load
 (function() {
   const k = getAnthropicKey();
