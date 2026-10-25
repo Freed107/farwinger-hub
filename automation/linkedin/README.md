@@ -58,20 +58,15 @@ Drafts are only ever written for Friedemann's InMails.
 The card merges this with what it classifies itself; for the same `id` the sweep's copy wins (it has read the body).
 `linkedin_done` is `{ "<id>": "<ISO>" }` and is written by the card only. Dismissals are forgotten after 90 days.
 
-## Install (one-off, about two minutes each)
+## Install status
 
-In claude.ai → **Scheduled tasks** → New task:
+Both tasks were created on 2026-10-25 and are enabled. They fire into the Claude Code session that built this, because
+tasks created from Claude Code that start a fresh session get no connectors in this organisation. That session has Gmail
+and Google Calendar, so the runs work; their summaries show up in that session.
 
-| Field | LinkedIn inbox sweep | LinkedIn Monday review |
-|---|---|---|
-| Name | `LinkedIn inbox sweep` | `LinkedIn Monday review` |
-| Schedule | weekdays 08:20 and 15:20, Europe/London (`20 8,15 * * 1-5`) | Mondays 08:40, Europe/London (`40 8 * * 1`) |
-| Connectors | Gmail, Google Calendar | Gmail, Google Calendar |
-| Model | Sonnet (same as the existing tasks) | Sonnet |
-| Prompt | everything below the `---` in [sweep.prompt.md](sweep.prompt.md) | everything below the `---` in [weekly.prompt.md](weekly.prompt.md) |
-
-Why not created from Claude Code: tasks created from a Claude Code session carry no connectors in this organisation, so
-their runs would have no Gmail. The two older tasks in the account were made in the UI and do have connectors.
+Optional, for standalone tasks: in claude.ai → Scheduled tasks → New, use the schedule above (`20 8,15 * * 1-5` and
+`40 8 * * 1`, Europe/London), add the Gmail and Google Calendar connectors, paste the prompt files' bodies, then delete
+the session-bound tasks so nothing runs twice.
 
 Until the sweep exists, the card still works: it reads Gmail through the Gmail worker whenever the hub is open (worker secret
 set once via the API Key button). What you lose without the sweep: exact thread links, InMail draft replies, calendar alerts.

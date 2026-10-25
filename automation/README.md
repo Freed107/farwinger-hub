@@ -5,18 +5,19 @@ The prompts are versioned here so a change is a normal commit, then a paste into
 
 | Task | When (Europe/London) | Connectors | Prompt file | Status |
 |---|---|---|---|---|
-| LinkedIn inbox sweep | Mon–Fri 08:20 and 15:20 | Gmail, Google Calendar | [linkedin/sweep.prompt.md](linkedin/sweep.prompt.md) | **to create** in claude.ai → Scheduled tasks (see linkedin/README.md → Install) |
-| LinkedIn Monday review | Mon 08:40 | Gmail, Google Calendar | [linkedin/weekly.prompt.md](linkedin/weekly.prompt.md) | **to create** in claude.ai → Scheduled tasks (see linkedin/README.md → Install) |
+| LinkedIn inbox sweep | Mon–Fri 08:20 and 15:20 | Gmail, Google Calendar | [linkedin/sweep.prompt.md](linkedin/sweep.prompt.md) | enabled 2026-10-25, fires into the Claude Code session that built it |
+| LinkedIn Monday review | Mon 08:40 | Gmail, Google Calendar | [linkedin/weekly.prompt.md](linkedin/weekly.prompt.md) | enabled 2026-10-25, fires into the Claude Code session that built it |
 | Pankaj accountant inbox — draft & notify | Mon–Fri 07,09,11,13,15,17 | Gmail, Drive, Calendar | (prompt lives in the task) | **disabled** since 2026-09-15 |
 | Event Square QT-000130 — chase or call it dead | Mon 08:12 | Gmail, Calendar | (prompt lives in the task) | **disabled**; quote expired 2026-09-17 — delete when convenient |
 
 Not scheduled, by design (runs in the browser whenever the hub is open): international-order phone requests
 (`checkAndDraftPhoneRequests`), ShipStation/Zoho/SendCloud/eBay refresh, the LinkedIn card refresh (every 15 min).
 
-## Why the LinkedIn tasks are not created from Claude Code
-A scheduled task created from a Claude Code session carries no connectors in this organisation, so its runs would have no
-Gmail or Calendar and fail. Tasks created in the claude.ai Scheduled tasks UI do carry connectors (the two older tasks above
-prove it). Create them there, from the prompt files.
+## How the LinkedIn tasks run
+A task that starts a fresh session gets no connectors when created from Claude Code in this organisation. So both LinkedIn
+tasks fire into the Claude Code session that built them, which already has Gmail and Google Calendar. Their run summaries
+appear in that session. To move them to standalone tasks, create them in claude.ai → Scheduled tasks with the Gmail and
+Google Calendar connectors and paste the prompt files, then delete the session-bound ones.
 
 ## Rules every task follows
 - Read-only on third-party platforms. Gmail: drafts only, never send. One calendar event per run at most.
