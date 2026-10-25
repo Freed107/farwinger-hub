@@ -2630,7 +2630,7 @@ function exportCSV(){
 buildProdData();
 renderOverview();
 // Load orders then cross-reference with SendCloud
-Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels().then(() => checkAndDraftPhoneRequests().catch(e=>console.warn('Phone request check:', e)))).then(() => fetchEbayOrders());
+Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels().then(() => { try { checkAndDraftPhoneRequests(); } catch(e) { console.warn('Phone request check:', e); } })).then(() => fetchEbayOrders());
 // Check API key status on load
 (function() {
   const k = getAnthropicKey();
