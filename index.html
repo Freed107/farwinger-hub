@@ -275,6 +275,24 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
   .side-panel { width:100%;right:-100%; }
   .charts-row { grid-template-columns:1fr; }
 }
+/* ─── LINKEDIN (needs-your-reply card on Overview · see automation/linkedin/README.md) ─── */
+.li-card a.btn { text-decoration:none; }
+.li-row { display:flex;align-items:flex-start;gap:12px;padding:10px 20px;border-bottom:1px solid rgba(46,40,32,.6); }
+.li-row:last-child { border-bottom:none; }
+.li-row.urgent { border-left:2px solid var(--fw-red); }
+.li-kind { flex-shrink:0;min-width:88px;text-align:center;padding:3px 8px;border-radius:5px;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:1px; }
+.li-main { flex:1;min-width:0; }
+.li-who { font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+.li-acct { font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;padding:0 5px;font-weight:400; }
+.li-sub { font-size:12px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.li-time { font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);min-width:52px;text-align:right;margin-top:3px; }
+.li-actions { display:flex;gap:6px;flex-shrink:0;align-items:center; }
+.li-actions .btn { padding:4px 10px;font-size:11px; }
+.li-empty { padding:16px 20px;font-size:12px;color:var(--text-dim);line-height:1.6; }
+.li-foot { padding:8px 20px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);border-top:1px solid var(--border);display:flex;gap:14px;flex-wrap:wrap; }
+.li-post { padding:10px 20px;border-bottom:1px solid rgba(46,40,32,.6);display:flex;gap:12px;align-items:flex-start; }
+.li-post-text { flex:1;font-size:12px;color:var(--text);white-space:pre-wrap;line-height:1.5;min-width:0; }
+@media(max-width:768px){ .li-row,.li-post { flex-wrap:wrap; } .li-actions { width:100%;justify-content:flex-end; } .li-time { text-align:left; } }
 </style>
 </head>
 <body>
@@ -349,6 +367,26 @@ td { padding:11px 18px;font-size:13px;vertical-align:middle; }
         <div class="stat"><div class="stat-label">Awaiting Dispatch</div><div class="stat-val" id="s-dispatch" style="color:var(--amber)">—</div><div class="stat-sub">pending orders</div><div class="stat-bar" style="background:linear-gradient(90deg,var(--amber),transparent)"></div></div>
         <div class="stat"><div class="stat-label">Avg. Order Value</div><div class="stat-val" id="s-avg">—</div><div class="stat-sub">per transaction</div><div class="stat-bar" style="background:linear-gradient(90deg,var(--fw-red),transparent)"></div></div>
         <div class="stat"><div class="stat-label">Quote → Invoice</div><div class="stat-val" id="s-conv">—</div><div class="stat-sub">direct conversion</div><div class="stat-bar" style="background:linear-gradient(90deg,var(--fw-blue),transparent)"></div></div>
+      </div>
+      <!-- LINKEDIN: things that need a human reply. Logic: the LINKEDIN block near the end of the script. Docs: automation/linkedin/README.md -->
+      <div class="activity-card li-card" id="linkedinCard">
+        <div class="card-header" style="gap:10px;flex-wrap:wrap">
+          <span class="card-title" style="display:flex;align-items:center;gap:8px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>
+            LinkedIn · needs your reply
+            <span class="nav-badge" id="linkedinBadge">0</span>
+          </span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span id="linkedinStatus" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted)"></span>
+            <a class="btn" href="https://www.linkedin.com/messaging/" target="_blank" rel="noopener">Inbox ↗</a>
+            <a class="btn" href="https://www.linkedin.com/mynetwork/invitation-manager/" target="_blank" rel="noopener">Invites ↗</a>
+            <button class="btn" onclick="linkedinCompose()" title="Open LinkedIn's post composer">✎ Post</button>
+            <button class="btn" onclick="linkedinLoad({manual:true})" title="Re-read Gmail and cloud state">↻</button>
+          </div>
+        </div>
+        <div id="linkedinList"><div class="li-empty">Loading…</div></div>
+        <div id="linkedinPosts"></div>
+        <div class="li-foot" id="linkedinFoot"></div>
       </div>
       <div class="charts-row">
         <div class="chart-card">
@@ -2627,8 +2665,251 @@ function exportCSV(){
   a.download='farwinger-orders.csv';a.click();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LINKEDIN · "needs your reply" card on the Overview tab
+// ---------------------------------------------------------------------------
+// LinkedIn has no inbox API. Every LinkedIn message, InMail, invitation and
+// Services-Marketplace lead already lands in Gmail as a notification email, so
+// this card is built from those emails. Two feeds, merged by Gmail message id:
+//   A) this page asks the Gmail worker for recent LinkedIn mail and classifies
+//      it with LINKEDIN.rules (needs the worker secret from the API Key modal);
+//   B) the scheduled sweep (automation/linkedin/sweep.prompt.md) reads the same
+//      mail with full bodies and writes KV key LINKEDIN.kv.items with exact
+//      thread links. Where both have an item, the sweep's richer copy wins.
+// "Done" stores the id in KV key LINKEDIN.kv.done, so it stays hidden on every
+// device. Items also expire after rule.maxAgeDays. Post drafts from the Monday
+// routine arrive in KV key LINKEDIN.kv.posts and open LinkedIn's composer
+// pre-filled (no LinkedIn API, no tokens).
+// Maintenance: to change what counts as actionable, edit LINKEDIN.rules only.
+// Everything LinkedIn-specific in this file lives between these two banners.
+// ═══════════════════════════════════════════════════════════════════════════
+const LINKEDIN = {
+  kv: { items: 'linkedin_inbox', done: 'linkedin_done', posts: 'linkedin_posts' },
+  gmailQuery: 'from:linkedin.com newer_than:30d',
+  refreshMinutes: 15,
+  // LinkedIn accounts whose notifications land in this mailbox (To: header → label).
+  accounts: { 'friedemann@farwinger.com': 'Friedemann', 'vincenzo.luccivo@luccivo.com': 'Vincenzo' },
+  links: {
+    messaging:   'https://www.linkedin.com/messaging/',
+    invitations: 'https://www.linkedin.com/mynetwork/invitation-manager/',
+    leads:       'https://www.linkedin.com/service-marketplace/provider/requests',
+    compose:     'https://www.linkedin.com/feed/?shareActive=true&text=',
+    gmail:       'https://mail.google.com/mail/?authuser=administrator@farwinger.com#all/'
+  },
+  // First matching rule wins. test(from, subject, snippet) gets lower-cased
+  // strings; who(subject, snippet, from) gets the originals and returns the
+  // person/thing to show. Repeats collapse to the newest item per kind, label,
+  // account and first name (collapse:'account' = per account only, for digests).
+  // Anything from linkedin.com that matches no rule
+  // ("you may know", "is hiring", "accepted your invitation", "popular in your
+  // network", newsletters) is noise and is not shown.
+  rules: [
+    { kind:'message', label:'Message',     color:'var(--fw-red)',   bg:'rgba(196,75,42,.14)',   urgent:true,  maxAgeDays:30, link:'messaging',
+      test:(f,s)=> f.includes('messaging-digest-noreply@') || / just messaged you$/.test(s),
+      who:(sub)=> sub.replace(/ just messaged you$/i,'') },
+    { kind:'inmail',  label:'InMail',      color:'var(--fw-red)',   bg:'rgba(196,75,42,.14)',   urgent:true,  maxAgeDays:30, link:'messaging', replyable:true,
+      test:(f)=> f.includes('hit-reply@linkedin.com'),
+      who:(sub,snip,from)=> (from.replace(/<.*>/,'').replace(/"/g,'').trim() || sub.replace(/^inmail from /i,'')) },
+    { kind:'lead',    label:'Lead',        color:'var(--fw-amber)', bg:'rgba(212,134,26,.14)',  urgent:true,  maxAgeDays:14, link:'leads',
+      test:(f,s)=> /request from .+ are available/.test(s),
+      who:(sub)=> { const m = sub.match(/^(.*?) request from (.+?)(?: and other clients)? are available/i); return m ? `${m[2].trim()} · ${m[1].trim()} request` : sub; } },
+    { kind:'lead',    label:'Lead?',       color:'var(--fw-amber)', bg:'rgba(212,134,26,.14)',  urgent:false, maxAgeDays:7,  link:'leads', collapse:'account',
+      test:(f,s)=> /opportunities may be available/.test(s),
+      who:(sub)=> sub.replace(/\.?\s*check requests\.?$/i,'') },
+    { kind:'invite',  label:'Invitation',  color:'var(--fw-blue)',  bg:'rgba(74,127,158,.16)',  urgent:false, maxAgeDays:14, link:'invitations',
+      test:(f,s,n)=> f.includes('invitations@') && /(want to connect|waiting for your response)/.test(s + ' ' + n),
+      who:(sub,snip)=> ((snip.split(/ is waiting for/i)[0] || '').trim() || sub) },
+    { kind:'invite',  label:'Invitations', color:'var(--fw-blue)',  bg:'rgba(74,127,158,.16)',  urgent:false, maxAgeDays:10, link:'invitations', collapse:'account',
+      test:(f,s)=> /you have \d+ new invitations?/.test(s),
+      who:(sub)=> sub.replace(/^you have /i,'') }
+  ]
+};
+
+let linkedinItems = [], linkedinDone = {}, linkedinPosts = {}, linkedinLoading = false;
+
+function liEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function liClean(s) {
+  // LinkedIn pads snippets with invisible U+034F/U+200C runs and HTML entities.
+  return String(s || '').replace(/[͏​‌‍﻿]/g, '').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+}
+function liRule(it) {
+  return LINKEDIN.rules.find(r => r.kind === it.kind && r.label === it.label) || LINKEDIN.rules.find(r => r.kind === it.kind) || null;
+}
+function liCollapseKey(it) {
+  const rule = liRule(it);
+  const base = [it.kind, it.label, it.account];
+  if (rule && rule.collapse === 'account') return base.join('|');
+  const first = String(it.who || '').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').trim().split(/\s+/)[0] || '';
+  return base.concat(first).join('|');
+}
+function linkedinAccount(m) {
+  const to = String(m.to || (Array.isArray(m.toRecipients) ? m.toRecipients.join(',') : '') || '').toLowerCase();
+  for (const [email, name] of Object.entries(LINKEDIN.accounts)) if (to.includes(email)) return name;
+  const blob = liClean((m.subject || '') + ' ' + (m.snippet || '')).toLowerCase();
+  for (const name of Object.values(LINKEDIN.accounts)) if (blob.includes(name.toLowerCase())) return name;
+  return Object.values(LINKEDIN.accounts)[0];
+}
+
+// Gmail message (worker /inbox shape: id, threadId, from, subject, snippet, date, to?) → card item or null
+function linkedinClassify(m) {
+  if (!m) return null;
+  const fromRaw = m.from || m.sender || '';
+  const from = String(fromRaw).toLowerCase();
+  if (!from.includes('linkedin.com')) return null;
+  const subject = liClean(m.subject), snippet = liClean(m.snippet);
+  const s = subject.toLowerCase(), n = snippet.toLowerCase();
+  const rule = LINKEDIN.rules.find(r => r.test(from, s, n));
+  if (!rule) return null;
+  const d = m.date ? new Date(m.date) : new Date();
+  return {
+    id: m.id, threadId: m.threadId || m.id,
+    kind: rule.kind, label: rule.label, urgent: !!rule.urgent, replyable: !!rule.replyable,
+    account: linkedinAccount(m),
+    who: ((rule.who ? rule.who(subject, snippet, String(fromRaw)) : subject) || subject).trim().slice(0, 80),
+    preview: (snippet || subject).slice(0, 160),
+    url: LINKEDIN.links[rule.link],
+    received: isNaN(d) ? new Date().toISOString() : d.toISOString(),
+    source: 'gmail'
+  };
+}
+
+// Merge sweep (KV) items with page-classified items; expire; collapse repeats
+function linkedinMerge(sweepItems, gmailItems) {
+  const byId = new Map();
+  for (const it of gmailItems) if (it && it.id) byId.set(it.id, it);
+  for (const it of sweepItems) {
+    if (!it || !it.id) continue;
+    const g = byId.get(it.id);
+    byId.set(it.id, Object.assign({}, g || {}, it, { source: 'sweep' }));
+  }
+  const now = Date.now();
+  let items = [...byId.values()].filter(it => {
+    const rule = liRule(it);
+    const maxAge = (rule && rule.maxAgeDays) || 14;
+    const t = new Date(it.received).getTime();
+    return !isNaN(t) && (now - t) < maxAge * 864e5;
+  });
+  items.sort((a, b) => new Date(b.received) - new Date(a.received));
+  const seen = new Set();   // newest wins: repeat digests, reminder emails, sweep + page copies of one person
+  items = items.filter(it => {
+    const k = liCollapseKey(it);
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+  // urgent first, then newest
+  items.sort((a, b) => (b.urgent - a.urgent) || (new Date(b.received) - new Date(a.received)));
+  return items;
+}
+
+function linkedinRender(notes) {
+  const list = document.getElementById('linkedinList');
+  if (!list) return;
+  const open = linkedinItems.filter(it => !linkedinDone[it.id]);
+  const badge = document.getElementById('linkedinBadge');
+  if (badge) { badge.textContent = open.length; badge.className = 'nav-badge' + (open.some(i => i.urgent) ? ' urgent' : ''); }
+  if (!open.length) {
+    list.innerHTML = '<div class="li-empty">Nothing on LinkedIn is waiting for a reply.</div>';
+  } else {
+    list.innerHTML = open.map(it => {
+      const rule = liRule(it);
+      const color = (rule && rule.color) || 'var(--fw-blue)';
+      const bg = (rule && rule.bg) || 'rgba(74,127,158,.16)';
+      const url = it.url || LINKEDIN.links.messaging;
+      return `<div class="li-row ${it.urgent ? 'urgent' : ''}">
+        <span class="li-kind" style="background:${bg};color:${color}">${liEsc(it.label || it.kind)}</span>
+        <div class="li-main">
+          <div class="li-who">${liEsc(it.who)} <span class="li-acct">${liEsc(it.account || '')}</span>${it.replyable ? '<span class="li-acct" title="Reply to the notification email in Gmail and it posts into the LinkedIn thread">reply by email</span>' : ''}${it.draft ? '<span class="li-acct" style="color:var(--green);border-color:rgba(93,187,122,.4)">draft ready</span>' : ''}</div>
+          <div class="li-sub" title="${liEsc(it.preview)}">${liEsc(it.preview)}</div>
+        </div>
+        <span class="li-time">${liEsc(formatGmailDate(it.received))}</span>
+        <div class="li-actions">
+          <a class="btn" href="${liEsc(url)}" target="_blank" rel="noopener">Open ↗</a>
+          <a class="btn" href="${liEsc(LINKEDIN.links.gmail + (it.threadId || it.id))}" target="_blank" rel="noopener" title="Open the notification email in Gmail">Gmail</a>
+          <button class="btn" onclick="linkedinMarkDone('${liEsc(it.id)}')" title="Hide everywhere (stored in the cloud)">Done</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  linkedinRenderPosts();
+  const foot = document.getElementById('linkedinFoot');
+  if (foot) foot.innerHTML = (notes || []).map(n => `<span>${liEsc(n)}</span>`).join('') || '<span>built from LinkedIn notification emails in Gmail</span>';
+  const status = document.getElementById('linkedinStatus');
+  if (status) status.textContent = 'checked ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function linkedinRenderPosts() {
+  const el = document.getElementById('linkedinPosts');
+  if (!el) return;
+  const posts = (Array.isArray(linkedinPosts.posts) ? linkedinPosts.posts : []).filter(p => p && p.id && p.text && !linkedinDone[p.id]);
+  if (!posts.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="li-foot" style="border-bottom:0">Post drafts from the Monday review · "Post" opens LinkedIn with the text pre-filled; you still press Post there</div>` +
+    posts.map(p => `<div class="li-post">
+      <span class="li-kind" style="background:rgba(10,102,194,.15);color:#6cb2f0">Draft</span>
+      <div class="li-post-text">${liEsc(p.text)}</div>
+      <div class="li-actions">
+        <button class="btn btn-send" onclick="linkedinCompose('${liEsc(p.id)}')">Post ↗</button>
+        <button class="btn" onclick="linkedinMarkDone('${liEsc(p.id)}')">Dismiss</button>
+      </div>
+    </div>`).join('');
+}
+
+function linkedinCompose(postId) {
+  const p = postId ? (linkedinPosts.posts || []).find(x => x && x.id === postId) : null;
+  window.open(LINKEDIN.links.compose + encodeURIComponent(p ? p.text : ''), '_blank', 'noopener');
+}
+
+async function linkedinMarkDone(id) {
+  if (!id) return;
+  linkedinDone[id] = new Date().toISOString();
+  const cutoff = Date.now() - 90 * 864e5;   // forget dismissals older than 90 days
+  for (const k of Object.keys(linkedinDone)) if (new Date(linkedinDone[k]).getTime() < cutoff) delete linkedinDone[k];
+  linkedinRender();
+  await statePut(LINKEDIN.kv.done, linkedinDone);
+}
+
+async function linkedinLoad(opts) {
+  opts = opts || {};
+  if (linkedinLoading) return;
+  linkedinLoading = true;
+  const status = document.getElementById('linkedinStatus');
+  if (status) status.textContent = 'checking…';
+  const notes = [];
+  try {
+    const [kvItems, kvDone, kvPosts] = await Promise.all([stateGet(LINKEDIN.kv.items), stateGet(LINKEDIN.kv.done), stateGet(LINKEDIN.kv.posts)]);
+    linkedinDone = (kvDone && typeof kvDone === 'object' && !Array.isArray(kvDone)) ? kvDone : {};
+    linkedinPosts = (kvPosts && typeof kvPosts === 'object') ? kvPosts : {};
+    const sweep = (kvItems && Array.isArray(kvItems.items)) ? kvItems.items : [];
+    notes.push(kvItems && kvItems.updated ? `cloud list ${formatGmailDate(kvItems.updated)} (${kvItems.source || 'sweep'})` : 'no cloud list yet');
+    let fromGmail = [];
+    if (getGmailWorkerSecret()) {
+      try {
+        const d = await gmailWorkerFetch('/inbox?q=' + encodeURIComponent(LINKEDIN.gmailQuery));
+        const msgs = Array.isArray(d.messages) ? d.messages : [];
+        fromGmail = msgs.map(linkedinClassify).filter(Boolean);
+        notes.push(`gmail: ${msgs.length} read, ${fromGmail.length} LinkedIn`);
+      } catch (e) { notes.push('gmail: ' + e.message); }
+    } else {
+      notes.push('gmail worker secret not set (API Key button) — showing cloud list only');
+    }
+    linkedinItems = linkedinMerge(sweep, fromGmail);
+    linkedinRender(notes);
+    // Publish the merged list so other devices and the sweep see the same thing
+    if (fromGmail.length) statePut(LINKEDIN.kv.items, { updated: new Date().toISOString(), source: 'dash', items: linkedinItems }).catch(() => {});
+  } catch (e) {
+    console.warn('[LinkedIn] load failed', e);
+    linkedinRender(['load failed: ' + (e && e.message || e)]);
+  }
+  linkedinLoading = false;
+  if (opts.manual) { showBanner('✓ LinkedIn card refreshed', 'success'); setTimeout(hideBanner, 2000); }
+}
+// ═══════════════════════════ end LINKEDIN ═══════════════════════════════════
+
 buildProdData();
 renderOverview();
+linkedinLoad();   // LinkedIn card on Overview — cloud list + Gmail worker; see LINKEDIN block
+setInterval(() => linkedinLoad(), LINKEDIN.refreshMinutes * 60 * 1000);
 // Load orders then cross-reference with SendCloud
 Promise.all([fetchShipStationOrders(), fetchZohoOrders()]).catch(()=>{}).finally(() => fetchSendCloudParcels().then(() => { try { checkAndDraftPhoneRequests(); } catch(e) { console.warn('Phone request check:', e); } })).then(() => fetchEbayOrders());
 // Check API key status on load
