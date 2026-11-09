@@ -13,7 +13,8 @@ Read `perdimi-portal/README.md` first. This file is the to-do list.
 | Worker code (`src/`), D1 schema, phone app (`public/`), `/admin` | Built, committed, pushed |
 | Strict reel order (talk → brief → storyboard → 480p → 720p) | Built. The server refuses anything out of order. |
 | Local tests (wrangler dev): ~40 API checks, chat tool loop vs mock API, 27 reel checks, iPhone offline outbox | All passed, except one reel check that failed only because of a bug in the test itself; the data showed correct behaviour |
-| Real Claude API, real Higgsfield, real deploy | **NOT tested. Nothing deployed.** |
+| Real Claude API, real Higgsfield, real deploy | **Done 9 Nov on Fred's PC.** Deployed to the estate account. Live chat answered as the creator, and a locked-topic question was refused. One 2-credit still ran end to end through the runner (cost check, approve, render, upload). |
+| Still open (9 Nov) | Fred registers the 3-minute runner task. Fred approves the brand brief (draft on the LUCCIVO drive). Fred's Meta, TikTok and Drive actions (step 8). |
 
 ## Do these in order
 

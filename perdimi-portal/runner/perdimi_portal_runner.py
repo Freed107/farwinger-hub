@@ -94,7 +94,9 @@ def run_template(template: str, job: dict) -> dict:
 def make_preview(src: Path, kind: str) -> bytes | None:
     """Small JPEG for the phone: 640px still, or the first frame of a video (needs Pillow / ffmpeg)."""
     try:
-        out = Path(tempfile.mkstemp(suffix=".jpg")[1])
+        fd, name = tempfile.mkstemp(suffix=".jpg")
+        os.close(fd)  # Windows: an open handle blocks PIL/ffmpeg from writing the file
+        out = Path(name)
         if kind == "video":
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.3", "-i", str(src), "-frames:v", "1",
                             "-vf", "scale='min(640,iw)':-2", "-q:v", "5", str(out)], check=True, timeout=120)
@@ -146,7 +148,7 @@ def do_renders(p: Portal, c: dict, dry: bool) -> list:
             try:
                 res = run_template(c["HF_RENDER_CMD"], job)
                 f = Path(res["file"])
-                ctype = "video/mp4" if j["kind"] == "video" else ("image/png" if f.suffix.lower() == ".png" else "image/jpeg")
+                ctype = "video/mp4" if j["kind"] == "video" else {".png": "image/png", ".webp": "image/webp"}.get(f.suffix.lower(), "image/jpeg")
                 p.call("PUT", f"/api/runner/renders/{jid}/result/full", raw=f.read_bytes(), ctype=ctype)
                 prev = make_preview(f, j["kind"])
                 if prev:
@@ -169,7 +171,8 @@ def do_tasks(p: Portal, dry: bool) -> list:
                   "Reply to her from /admin (Team tasks) - she sees it in the portal. Scope: PERDIMI/VENENVM/LUCCIVO only.")
         if dry:
             print("WOULD FILE", due, title); continue
-        r = subprocess.run([sys.executable, str(LEDGER_PY), "add-task", "--venture", "perdimi",
+        # the ledger has no "perdimi" venture: PERDIMI runs in the luccivo ledger lane (web-properties venture_ledger)
+        r = subprocess.run([sys.executable, str(LEDGER_PY), "add-task", "--venture", "luccivo",
                             "--persona", TEAM_PERSONA.get(t["team"], "fred"), "--one-off", "--due", due, "--dup-ok",
                             "--source", f"perdimi creator portal task {t['id']}",
                             "--action", title, "--detail", detail], capture_output=True, text=True, timeout=120)
