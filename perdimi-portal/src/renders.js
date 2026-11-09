@@ -55,27 +55,26 @@ export async function applyEstimate(env, renderId, credits) {
   if (!job) return { error: 'no such render' };
   if (job.status !== 'estimating') return { status: job.status };
   const cfg = await budgetConfig(env);
-  const estGbp = cfg.perCredit != null ? round2(credits * cfg.perCredit) : null;
+  const pctOf = (n) => Math.round((n / cfg.budget) * 100);
 
   let status = 'approved';
   let reason = null;
   if (job.role !== 'owner') {
     const spend = await monthSpend(env, job.requested_by);
     if (cfg.paused) reason = 'Renders are paused by Fred.';
-    else if (estGbp == null) reason = 'The £ price of a credit is not set yet, so the spend cannot be checked.';
     else if (job.quality === 'final' && !job.parent_id) reason = 'Final quality without a kept low-quality draft first.';
-    else if (spend.committed + estGbp > cfg.budget)
-      reason = `Over the £${cfg.budget} monthly allowance (spent £${spend.committed}, this one ~£${estGbp}).`;
+    else if (spend.committed + credits > cfg.budget)
+      reason = `Over this month's allowance (${pctOf(spend.committed)}% used, this one needs ${pctOf(credits)}% more).`;
     if (reason) status = 'awaiting_owner';
   }
   await env.DB.prepare(
-    `UPDATE renders SET est_credits = ?, est_gbp = ?, status = ?, hold_reason = ?, updated_at = datetime('now') WHERE id = ?`
-  ).bind(credits, estGbp, status, reason, renderId).run();
+    `UPDATE renders SET est_credits = ?, status = ?, hold_reason = ?, updated_at = datetime('now') WHERE id = ?`
+  ).bind(credits, status, reason, renderId).run();
   await notifyThread(env, job.thread_id,
     status === 'approved'
-      ? `Render #${renderId} (${job.kind}, ${job.quality}) costs ~${credits} credits${estGbp != null ? ` (~£${estGbp})` : ''}. Rendering now.`
+      ? `Render #${renderId} (${job.kind}, ${job.quality}) uses ${credits} credits, ${pctOf(credits)}% of this month's allowance. Rendering now.`
       : `Render #${renderId} is waiting for Fred: ${reason}`);
-  return { status, est_gbp: estGbp, reason };
+  return { status, est_credits: credits, reason };
 }
 
 export async function notifyThread(env, threadId, text) {
@@ -88,7 +87,7 @@ export function renderView(r) {
   return {
     id: r.id, kind: r.kind, quality: r.quality, prompt: r.prompt, aspect: r.aspect, seconds: r.seconds,
     parent_id: r.parent_id, reel_id: r.reel_id, reel_stage: r.reel_stage, frame_no: r.frame_no, resolution: r.resolution, status: r.status, hold_reason: r.hold_reason, verdict: r.verdict,
-    est_credits: r.est_credits, est_gbp: r.est_gbp, actual_gbp: r.actual_gbp,
+    est_credits: r.est_credits, actual_credits: r.actual_credits,
     result_media_id: r.result_media_id, error: r.error, created_at: r.created_at,
   };
 }

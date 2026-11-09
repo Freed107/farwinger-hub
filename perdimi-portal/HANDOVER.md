@@ -35,9 +35,8 @@ Read `perdimi-portal/README.md` first. This file is the to-do list.
 3. **Deploy.** Run `npx wrangler deploy`, then open `https://<worker>.workers.dev/admin`. Sign in as administrator@farwinger.com: request a code by e-mail and type it in.
    - Optional: uncomment the `studio.perdimi.com` route in `wrangler.toml`, then redeploy.
 4. **/admin settings.**
-   - **£ per Higgsfield credit.** Until this is set, every render waits for Fred.
-   - **Monthly allowance:** £30.
-   - **Who approves reel steps:** Blessing (the default) or "Only me". Ask Fred which.
+   - **Monthly allowance:** 400 Higgsfield credits (about 2 finished 720p reels), shown to her only as a percentage. DONE 9 Nov: Fred said no pounds.
+   - **Who approves reel steps:** Blessing (the default). DONE 9 Nov: Fred chose her.
    - **Resource links** (JSON): the PERDIMI Drive folder and the Pinterest boards. The boards are under the vincenzoluccivo account: perdimi-venenvm, deadly-poison, social-design-2, fragrance, interior-furniture, perdimi-furniture. Check the URLs before adding them; they were inferred from board names.
 5. **Brand knowledge** (/admin → Brand knowledge). Load a PERDIMI/VENENVM/LUCCIVO-only brief, built from "PERDIMI - CANON (read first).md" and the Style Book (LUCCIVO shared drive). Fred reviews it before it goes in.
    - Lines that mention the `LOCKED_TERMS` words are stripped automatically. Still remove anything personal, or about other companies, by hand.

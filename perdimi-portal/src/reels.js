@@ -23,7 +23,7 @@ export async function getReel(env, id) {
 
 export async function reelView(env, reel) {
   const { results } = await env.DB.prepare(
-    `SELECT id, reel_stage, frame_no, resolution, prompt, status, verdict, result_media_id, est_credits, est_gbp, actual_gbp, hold_reason, error, parent_id
+    `SELECT id, reel_stage, frame_no, resolution, prompt, status, verdict, result_media_id, est_credits, actual_credits, hold_reason, error, parent_id
      FROM renders WHERE reel_id = ? ORDER BY id`
   ).bind(reel.id).all();
   return {

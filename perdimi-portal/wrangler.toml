@@ -23,7 +23,7 @@ not_found_handling = "none"
 [[d1_databases]]
 binding = "DB"
 database_name = "perdimi-creator-portal"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "3ff6aca7-0bf9-445b-96b5-357686303fa2"
 
 [[r2_buckets]]
 binding = "MEDIA"
@@ -48,11 +48,11 @@ crons = ["*/5 * * * *"]
 OWNER_EMAIL = "administrator@farwinger.com"
 CLAUDE_MODEL = "claude-opus-5-5"
 CLAUDE_EFFORT = "high"
-# Her free-spend allowance for renders, per calendar month (UTC). Above it, a render waits for Fred.
-CREATOR_BUDGET_GBP = "30"
-# Pounds per Higgsfield credit. EMPTY = unknown = every render waits for Fred until he sets it (fail safe).
-GBP_PER_CREDIT = ""
-MAIL_FROM = "PERDIMI Studio <studio@send.perdimi.com>"
+# Her render allowance per calendar month (UTC), in Higgsfield credits - shown to her as a percentage, never in money
+# (Fred, 9 Nov). 400 = about 2 finished 720p reels (Fred's sizing; Seedance 2.5 9:16 15 s = 45 cr at 480p + 105 cr at
+# 720p, plus storyboard stills and redos). Above it, a render waits for Fred.
+CREATOR_BUDGET_CREDITS = "400"
+MAIL_FROM = "PERDIMI Studio <studio@perdimi.com>"
 # Lines of knowledge containing any of these words are never sent to Claude (comma-separated, case-insensitive).
 LOCKED_TERMS = "aichabelle,farwinger,stillroom,hobfolk,sankktum,woodenballs,milk street,orton way,global-vault,h:\\"
 

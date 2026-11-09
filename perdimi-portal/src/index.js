@@ -473,7 +473,7 @@ async function adminApi(request, env, url, person) {
 
   if (path === '/api/admin/settings' && method === 'POST') {
     const b = await request.json().catch(() => ({}));
-    const allowed = ['creator_budget_gbp', 'gbp_per_credit', 'renders_paused', 'links', 'reel_approver'];
+    const allowed = ['creator_budget_credits', 'renders_paused', 'links', 'reel_approver'];
     for (const k of allowed) if (k in b) await setSetting(env, k, typeof b[k] === 'string' ? b[k] : JSON.stringify(b[k]));
     await audit(env, person.id, 'settings', Object.keys(b).join(','));
     return json({ ok: true });
@@ -579,12 +579,10 @@ async function runnerApi(request, env, url) {
     const b = await request.json().catch(() => ({}));
     const job = await env.DB.prepare('SELECT * FROM renders WHERE id = ?').bind(p.id).first();
     if (!job || !job.result_media_id) return err(409, 'upload the result first');
-    const perCreditRaw = await getSetting(env, 'gbp_per_credit', env.GBP_PER_CREDIT || '');
-    const perCredit = perCreditRaw ? parseFloat(perCreditRaw) : null;
     const credits = b.actual_credits != null ? Number(b.actual_credits) : job.est_credits;
     await env.DB.prepare(
-      `UPDATE renders SET status = 'done', actual_credits = ?, actual_gbp = ?, updated_at = datetime('now') WHERE id = ?`
-    ).bind(credits, perCredit != null && credits != null ? Math.round(credits * perCredit * 100) / 100 : null, job.id).run();
+      `UPDATE renders SET status = 'done', actual_credits = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(credits, job.id).run();
     await notifyThread(env, job.thread_id,
       job.reel_id
         ? `Reel #${job.reel_id}: ${job.reel_stage === 'storyboard' ? `storyboard frame ${job.frame_no}` : `${job.resolution} video`} is ready (render #${job.id}, media ${job.result_media_id}). Look at it in Studio > Reels: approve the step, or redo it.`

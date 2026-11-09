@@ -9,7 +9,7 @@ This is Blessing Francis's portal for making PERDIMI social media. It runs on on
 | Tab | What it does |
 |---|---|
 | **Chat** | An instant chat with Claude (`claude-opus-5-5`, no spend cap). She can attach photos and videos. Claude guides her, but she can overrule it. Claude acts through tools: renders, posts, site ideas and team tasks. |
-| **Studio** | **Reels**, each with its step tracker and Approve / Back buttons. Her still images, with Keep / Discard / Make final / Cancel. Her monthly £ allowance, including how much she has spent on discarded renders. |
+| **Studio** | **Reels**, each with its step tracker and Approve / Back buttons. Her still images, with Keep / Discard / Make final / Cancel. Her monthly render allowance as % used / % left (never money), including the share spent on discarded renders. |
 | **Post** | Posts that are ready to go: Save the media, Copy the caption, open Instagram / Facebook / TikTok / Threads, then *Mark posted* with the link. |
 | **Site** | Website ideas for perdimi.com. **Nothing changes on the site until Fred approves the idea in /admin.** |
 | **More** | Resource links (Drive folder, Pinterest boards), replies from the team (SEO, marketing, creative director, film crew, Fred), and sign-out. |
@@ -41,8 +41,7 @@ The server refuses any render that is out of order: no video without an approved
 These are not just prompt text.
 
 - **Low quality first.** Reels go storyboard, then 480p, then 720p (see above). A final still image needs a draft she has kept. A final made without one goes to Fred.
-- **£30 a month without asking** (`CREATOR_BUDGET_GBP`, which can be changed in /admin). The real cost comes from the runner's **free** Higgsfield preflight *before* anything is spent. Above the allowance, the job waits for Fred.
-- **Unknown credit price means everything waits for Fred.** Set *£ per Higgsfield credit* in /admin. This is the fail-safe default.
+- **A monthly allowance in Higgsfield credits, shown only as a percentage** (Fred, 9 Nov: no pounds). `CREATOR_BUDGET_CREDITS` = 400, about 2 finished 720p reels; changeable in /admin. The real cost comes from the runner's **free** Higgsfield preflight *before* anything is spent. Above the allowance, the job waits for Fred.
 - **Website changes need Fred's approval.** Site ideas only go into a queue that only Fred can decide on.
 - **Scope lock (PERDIMI, VENENVM, LUCCIVO only).**
   - The real fence is data. Claude only ever sees the knowledge Fred loads.
@@ -72,7 +71,7 @@ Optional: uncomment the `studio.perdimi.com` route in `wrangler.toml` and redepl
 
 Then, in `https://<worker>/admin`, signed in as `OWNER_EMAIL`:
 1. **Settings:**
-   - Set *£ per Higgsfield credit* (until you do, every render waits for you).
+   - Check the monthly allowance in credits (default 400, about 2 finished 720p reels).
    - Add the resource links as JSON, e.g. `[{"label":"PERDIMI shared Drive folder","url":"…"},{"label":"Pinterest: perdimi-venenvm","url":"…"}]`.
 2. **Brand knowledge:** paste a cleaned PERDIMI brief, or let the runner push the canon and style book (`knowledge` command).
 3. **Sign-in:** tell Blessing the URL. She enters her e-mail and types the code. If the code doesn't arrive, use the WhatsApp code.

@@ -99,12 +99,12 @@ export async function setSetting(env, key, value) {
 }
 
 // Effective config: a value Fred set in /admin wins over the wrangler var.
+// The allowance is in Higgsfield credits, never in money (Fred, 9 Nov: "display the allowance in percentages or
+// tokens, not in pounds"). Sized by Fred: the month's allowance buys 2 complete 720p reels.
 export async function budgetConfig(env) {
-  const budget = parseFloat(await getSetting(env, 'creator_budget_gbp', env.CREATOR_BUDGET_GBP || '30'));
-  const perCreditRaw = await getSetting(env, 'gbp_per_credit', env.GBP_PER_CREDIT || '');
-  const perCredit = perCreditRaw === '' || perCreditRaw == null ? null : parseFloat(perCreditRaw);
+  const budget = parseFloat(await getSetting(env, 'creator_budget_credits', env.CREATOR_BUDGET_CREDITS || '400'));
   const paused = (await getSetting(env, 'renders_paused', 'false')) === 'true';
-  return { budget: isFinite(budget) ? budget : 30, perCredit: isFinite(perCredit) ? perCredit : null, paused };
+  return { budget: isFinite(budget) && budget > 0 ? budget : 400, paused };
 }
 
 // Spend this calendar month (UTC). Real cost where the runner reported it, estimate otherwise.
@@ -112,9 +112,9 @@ export async function budgetConfig(env) {
 export async function monthSpend(env, personId) {
   const r = await env.DB.prepare(
     `SELECT
-       COALESCE(SUM(COALESCE(actual_gbp, est_gbp, 0)), 0) AS committed,
-       COALESCE(SUM(CASE WHEN verdict = 'discard' THEN COALESCE(actual_gbp, est_gbp, 0) ELSE 0 END), 0) AS discarded,
-       COALESCE(SUM(CASE WHEN quality = 'final' AND parent_id IS NULL THEN COALESCE(actual_gbp, est_gbp, 0) ELSE 0 END), 0) AS final_without_draft,
+       COALESCE(SUM(COALESCE(actual_credits, est_credits, 0)), 0) AS committed,
+       COALESCE(SUM(CASE WHEN verdict = 'discard' THEN COALESCE(actual_credits, est_credits, 0) ELSE 0 END), 0) AS discarded,
+       COALESCE(SUM(CASE WHEN quality = 'final' AND parent_id IS NULL THEN COALESCE(actual_credits, est_credits, 0) ELSE 0 END), 0) AS final_without_draft,
        COUNT(*) AS jobs
      FROM renders
      WHERE requested_by = ?
@@ -134,14 +134,17 @@ export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 export async function budgetStatus(env, personId) {
   const cfg = await budgetConfig(env);
   const spend = await monthSpend(env, personId);
+  const pct = (n) => Math.round((n / cfg.budget) * 100);
   return {
-    budget_gbp: cfg.budget,
-    spent_gbp: spend.committed,
-    left_gbp: round2(Math.max(0, cfg.budget - spend.committed)),
-    discarded_gbp: spend.discarded,
-    final_without_draft_gbp: spend.finalWithoutDraft,
+    budget_credits: cfg.budget,
+    spent_credits: spend.committed,
+    left_credits: round2(Math.max(0, cfg.budget - spend.committed)),
+    used_pct: Math.min(100, pct(spend.committed)),
+    left_pct: Math.max(0, 100 - pct(spend.committed)),
+    discarded_credits: spend.discarded,
+    discarded_pct: pct(spend.discarded),
+    final_without_draft_credits: spend.finalWithoutDraft,
     jobs_this_month: spend.jobs,
-    gbp_per_credit_known: cfg.perCredit != null,
     renders_paused: cfg.paused,
   };
 }

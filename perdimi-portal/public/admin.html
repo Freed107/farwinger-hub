@@ -51,7 +51,7 @@ pre{white-space:pre-wrap;font-size:13px}
 
     html += `<h2>Waiting for you · renders</h2>`;
     html += d.renders_waiting.length ? d.renders_waiting.map((r) => `<div class="card"><div class="row" style="justify-content:space-between"><b>#${r.id} ${r.kind} · ${r.quality}${r.parent_id ? ' from #' + r.parent_id : ''}</b><span class="warn">${esc(r.hold_reason)}</span></div>
-      <div class="sub">~${r.est_credits ?? '?'} credits${r.est_gbp != null ? ' · ~£' + r.est_gbp : ''}</div><pre>${esc(r.prompt)}</pre>
+      <div class="sub">~${r.est_credits ?? '?'} credits</div><pre>${esc(r.prompt)}</pre>
       <div class="row" style="margin-top:8px"><button class="btn primary" data-r="${r.id}" data-a="approve">Approve</button><button class="btn bad" data-r="${r.id}" data-a="reject">Reject</button></div></div>`).join('') : '<div class="sub">Nothing waiting.</div>';
 
     html += `<h2>Website ideas</h2>`;
@@ -62,9 +62,8 @@ pre{white-space:pre-wrap;font-size:13px}
       <div class="row" style="margin-top:8px"><button class="btn primary" data-g="${g.id}" data-s="approved">Approve</button><button class="btn bad" data-g="${g.id}" data-s="rejected">Reject</button></div></div>`).join('') : '<div class="sub">No ideas yet.</div>';
 
     html += `<div class="grid2"><div><h2>Render allowance (this month)</h2><div class="card">
-      ${b ? `<div>£${b.spent_gbp} spent of £${b.budget_gbp} · <b>£${b.left_gbp} left</b></div><div class="sub">Discarded: £${b.discarded_gbp} · finals without draft: £${b.final_without_draft_gbp} · jobs: ${b.jobs_this_month}</div>` : '<div class="sub">No creator yet.</div>'}
-      <label class="sub" style="display:block;margin-top:10px">Monthly allowance £</label><input id="set-budget" value="${esc(s.creator_budget_gbp ?? '')}" placeholder="30">
-      <label class="sub" style="display:block;margin-top:8px">£ per Higgsfield credit (empty = every render waits for you)</label><input id="set-credit" value="${esc(s.gbp_per_credit ?? '')}" placeholder="e.g. 0.05">
+      ${b ? `<div>${b.used_pct}% used · <b>${b.left_pct}% left</b> (${Math.round(b.spent_credits)} of ${b.budget_credits} credits)</div><div class="sub">Discarded: ${b.discarded_pct}% · finals without draft: ${Math.round(b.final_without_draft_credits)} credits · jobs: ${b.jobs_this_month}</div>` : '<div class="sub">No creator yet.</div>'}
+      <label class="sub" style="display:block;margin-top:10px">Monthly allowance in Higgsfield credits (400 = about 2 finished 720p reels)</label><input id="set-budget" value="${esc(s.creator_budget_credits ?? '')}" placeholder="400">
       <label class="sub" style="display:block;margin-top:8px">Who approves reel steps (brief, storyboard, 480p, 720p)</label>
       <select id="set-approver" style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:8px"><option value="creator" ${s.reel_approver !== 'owner' ? 'selected' : ''}>Blessing (you can too)</option><option value="owner" ${s.reel_approver === 'owner' ? 'selected' : ''}>Only me</option></select>
       <label class="row" style="margin-top:8px"><input type="checkbox" id="set-paused" style="width:auto" ${s.renders_paused === 'true' ? 'checked' : ''}> Pause all renders</label>
@@ -90,7 +89,7 @@ pre{white-space:pre-wrap;font-size:13px}
       <button class="btn primary" id="k-save" style="margin-top:8px">Save knowledge</button></div>`;
 
     html += `<h2>Posts</h2><div class="card"><table>${d.posts.map((p) => `<tr><td>#${p.id} ${esc(p.platform)}</td><td>${p.status}</td><td class="sub">${esc(p.caption.slice(0, 120))}</td><td>${p.url ? `<a href="${esc(p.url)}" target="_blank" style="color:var(--copper)">link</a>` : ''}</td></tr>`).join('') || '<tr><td class="sub">None</td></tr>'}</table></div>`;
-    html += `<h2>Recent renders</h2><div class="card"><table>${d.renders_recent.map((r) => `<tr><td>${r.result_media_id ? `<a href="/media/${r.result_media_id}/full" target="_blank"><img class="t" style="width:60px;height:60px" src="/media/${r.result_media_id}/preview"></a>` : ''}</td><td>#${r.id} ${r.kind}/${r.quality}</td><td>${r.status}${r.verdict ? ' · ' + r.verdict : ''}</td><td>${r.actual_gbp != null ? '£' + r.actual_gbp : r.est_gbp != null ? '~£' + r.est_gbp : ''}</td></tr>`).join('')}</table></div>`;
+    html += `<h2>Recent renders</h2><div class="card"><table>${d.renders_recent.map((r) => `<tr><td>${r.result_media_id ? `<a href="/media/${r.result_media_id}/full" target="_blank"><img class="t" style="width:60px;height:60px" src="/media/${r.result_media_id}/preview"></a>` : ''}</td><td>#${r.id} ${r.kind}/${r.quality}</td><td>${r.status}${r.verdict ? ' · ' + r.verdict : ''}</td><td>${r.actual_credits != null ? r.actual_credits + ' cr' : r.est_credits != null ? '~' + r.est_credits + ' cr' : ''}</td></tr>`).join('')}</table></div>`;
     html += `<h2>Audit</h2><div class="card"><table>${d.audit.map((a) => `<tr><td class="sub">${esc(a.at)}</td><td>${esc(a.action)}</td><td class="sub">${esc(a.detail || '')}</td></tr>`).join('')}</table></div>`;
     $('#root').innerHTML = html;
   }
@@ -109,7 +108,7 @@ pre{white-space:pre-wrap;font-size:13px}
       if (t.id === 'k-save') { await api('/api/admin/knowledge', { method: 'PUT', body: JSON.stringify({ key: $('#k-key').value.trim(), body: $('#k-body').value }) }); return load(); }
       if (t.id === 'save-settings') {
         JSON.parse($('#set-links').value || '[]');
-        await post('/api/admin/settings', { creator_budget_gbp: $('#set-budget').value.trim() || '30', gbp_per_credit: $('#set-credit').value.trim(), renders_paused: $('#set-paused').checked ? 'true' : 'false', reel_approver: $('#set-approver').value, links: $('#set-links').value.trim() || '[]' });
+        await post('/api/admin/settings', { creator_budget_credits: $('#set-budget').value.trim() || '400',renders_paused: $('#set-paused').checked ? 'true' : 'false', reel_approver: $('#set-approver').value, links: $('#set-links').value.trim() || '[]' });
         return load();
       }
       if (t.id === 'make-code') {

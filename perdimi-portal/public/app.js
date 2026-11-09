@@ -126,7 +126,7 @@
 
   function renderBudget(b) {
     if (!b) return;
-    $('#budget-pill').textContent = `£${b.left_gbp.toFixed(2)} left`;
+    $('#budget-pill').textContent = `${b.left_pct}% left`;
   }
 
   // ------------------------------------------------------------------ threads
@@ -428,12 +428,10 @@
     catch { v.innerHTML = '<div class="empty">No connection. Pull down later to retry.</div>'; return; }
     media.media.forEach((m) => (S.mediaKinds[m.id] = m.kind));
     const b = r.budget; renderBudget(b);
-    const pct = Math.min(100, (b.spent_gbp / b.budget_gbp) * 100 || 0);
     let html = `<h2>Render allowance · this month</h2><div class="card">
-      <div class="top"><span>£${b.spent_gbp.toFixed(2)} of £${b.budget_gbp.toFixed(2)}</span><b>£${b.left_gbp.toFixed(2)} left</b></div>
-      <div class="meter"><i style="width:${pct}%"></i></div>
-      <div class="sub">Spent on discarded renders: £${b.discarded_gbp.toFixed(2)}${b.final_without_draft_gbp ? ` · finals without a draft: £${b.final_without_draft_gbp.toFixed(2)}` : ''}</div>
-      ${!b.gbp_per_credit_known ? '<div class="sub" style="margin-top:6px;color:var(--warn)">Credit price not set yet: every render waits for Fred.</div>' : ''}
+      <div class="top"><span>${b.used_pct}% used</span><b>${b.left_pct}% left · ${Math.round(b.left_credits)} credits</b></div>
+      <div class="meter"><i style="width:${b.used_pct}%"></i></div>
+      <div class="sub">A full month is about 2 finished 720p reels. On discarded renders: ${b.discarded_pct}%${b.final_without_draft_credits ? ` · finals without a draft: ${Math.round(b.final_without_draft_credits)} credits` : ''}</div>
       ${b.renders_paused ? '<div class="sub" style="margin-top:6px;color:var(--warn)">Renders are paused by Fred.</div>' : ''}
       <div class="sub" style="margin-top:6px">Reels: storyboard, then 480p, then 720p. Stills: draft first, then final.</div></div>`;
     html += reelsHtml(reels.reels);
@@ -442,7 +440,7 @@
     if (!stills.length) html += '<div class="empty">No still images yet. Ask in Chat, e.g. "draft an image of…"</div>';
     for (const x of stills) {
       const [label, cls] = STATUS[x.status] || [x.status, ''];
-      const cost = x.actual_gbp != null ? `£${x.actual_gbp.toFixed(2)}` : x.est_gbp != null ? `~£${x.est_gbp.toFixed(2)}` : x.est_credits ? `~${x.est_credits} cr` : '';
+      const cost = x.actual_credits != null ? `${x.actual_credits} cr` : x.est_credits ? `~${x.est_credits} cr` : '';
       const mediaHtml = x.result_media_id
         ? `<img class="media" loading="lazy" src="/media/${encodeURIComponent(x.result_media_id)}/preview" data-media="${esc(x.result_media_id)}" alt="">`
         : '';
