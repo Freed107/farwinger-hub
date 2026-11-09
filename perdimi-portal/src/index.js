@@ -75,7 +75,9 @@ async function handle(request, env, ctx) {
 
   if (path === '/admin') {
     if (person.role !== 'owner') return Response.redirect(new URL('/', url), 302);
-    return env.ASSETS.fetch(new Request(new URL('/admin.html', url), request));
+    // Ask the asset server for "/admin", not "/admin.html": its html_handling redirects *.html to the bare path,
+    // which comes back to this Worker and loops (ERR_TOO_MANY_REDIRECTS, found live 9 Nov).
+    return env.ASSETS.fetch(new Request(new URL('/admin', url), request));
   }
 
   if (path === '/api/logout' && method === 'POST') {
