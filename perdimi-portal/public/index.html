@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PERDIMI Studio</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#120e12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PERDIMI">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<style>
+:root{
+  --bg:#120e12; --surface:#1b151b; --surface2:#251c25; --line:#3a2c38;
+  --text:#f3ece6; --dim:#a8979f; --rose:#d9a49a; --copper:#c8835a; --plum:#6c4a6a;
+  --ok:#8fc39b; --warn:#e7c06a; --bad:#e58a83;
+  --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--rose)}
+.hidden{display:none!important}
+.wordmark{font-family:Georgia,"Times New Roman",serif;letter-spacing:.32em;font-weight:400}
+
+/* login */
+#login{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:32px 20px calc(32px + var(--safe-b));max-width:420px;margin:0 auto;gap:14px}
+#login h1{font-size:26px;text-align:center}
+#login p{color:var(--dim);text-align:center;font-size:14px}
+.field{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:17px}
+.btn{padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface2)}
+.btn.primary{background:var(--copper);border-color:var(--copper);color:#1a0f0a;font-weight:600}
+.btn.small{padding:7px 11px;font-size:14px;border-radius:10px}
+.btn:disabled{opacity:.5}
+.msg-err{color:var(--bad);text-align:center;font-size:14px;min-height:20px}
+
+/* shell */
+#app{height:100%;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(10px + var(--safe-t)) 16px 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+header .wordmark{font-size:13px;white-space:nowrap}
+.pill{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);white-space:nowrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle}
+.dot.off{background:var(--bad)} .dot.slow{background:var(--warn)}
+main{flex:1;overflow:hidden;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 20px}
+nav{display:flex;border-top:1px solid var(--line);background:var(--surface);padding-bottom:var(--safe-b)}
+nav button{flex:1;background:none;border:0;padding:10px 0 9px;font-size:12px;color:var(--dim);display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button.on{color:var(--rose)}
+nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6}
+
+/* chat */
+#view-chat{display:flex;flex-direction:column;padding:0}
+#threadbar{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line)}
+#threadbar select{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:7px 8px;font-size:14px}
+#messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:88%;padding:10px 13px;border-radius:16px;font-size:15.5px;word-wrap:break-word;overflow-wrap:anywhere}
+.m.user{align-self:flex-end;background:var(--plum);border-bottom-right-radius:5px}
+.m.assistant{align-self:flex-start;background:var(--surface2);border-bottom-left-radius:5px}
+.m.note{align-self:center;background:none;color:var(--dim);font-size:13px;text-align:center;max-width:95%;padding:2px 8px}
+.m.pending{opacity:.65}
+.m .meta{font-size:11px;color:var(--dim);margin-top:4px}
+.m p+p,.m ul,.m ol{margin-top:6px} .m ul,.m ol{padding-left:20px}
+.m code{background:rgba(255,255,255,.07);padding:1px 4px;border-radius:4px;font-size:14px}
+.thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.thumbs img,.thumb-ph{width:92px;height:92px;object-fit:cover;border-radius:10px;background:var(--surface);display:block}
+.typing{align-self:flex-start;color:var(--dim);font-size:14px;padding:4px 2px}
+#composer{border-top:1px solid var(--line);padding:8px 10px;background:var(--bg)}
+#attachments{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.chip{position:relative;width:60px;height:60px;border-radius:9px;overflow:hidden;background:var(--surface2);font-size:11px;display:flex;align-items:center;justify-content:center;text-align:center}
+.chip img{width:100%;height:100%;object-fit:cover}
+.chip .bar{position:absolute;left:0;bottom:0;height:4px;background:var(--copper)}
+.chip .x{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);border:0;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px}
+.row{display:flex;gap:8px;align-items:flex-end}
+#input{flex:1;resize:none;max-height:140px;min-height:44px;padding:11px 13px;border-radius:22px;border:1px solid var(--line);background:var(--surface);font-size:16px}
+.iconbtn{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface2);display:flex;align-items:center;justify-content:center;flex:none}
+.iconbtn.send{background:var(--copper);border-color:var(--copper);color:#1a0f0a}
+.iconbtn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+/* cards */
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:500;margin:6px 0 10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.card .top{display:flex;justify-content:space-between;gap:8px;font-size:14px;margin-bottom:8px}
+.card .media{width:100%;border-radius:10px;background:#000;display:block;max-height:60vh;object-fit:contain}
+.card .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.card .sub{color:var(--dim);font-size:13px}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}
+.tag.ok{color:var(--ok);border-color:var(--ok)} .tag.warn{color:var(--warn);border-color:var(--warn)} .tag.bad{color:var(--bad);border-color:var(--bad)}
+.meter{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden;margin:8px 0}
+.meter i{display:block;height:100%;background:var(--copper)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid img,.grid .thumb-ph{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--surface2);display:block}
+.caption{white-space:pre-wrap;background:var(--surface2);border-radius:10px;padding:10px;font-size:14px;margin-top:8px;max-height:220px;overflow:auto}
+textarea.field{min-height:110px;resize:vertical}
+.list a{display:block;padding:12px 0;border-bottom:1px solid var(--line);text-decoration:none}
+.empty{color:var(--dim);font-size:14px;text-align:center;padding:30px 10px}
+
+/* viewer */
+#viewer{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:50;display:flex;flex-direction:column;padding:calc(10px + var(--safe-t)) 10px calc(10px + var(--safe-b))}
+#viewer .vbody{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#viewer img,#viewer video{max-width:100%;max-height:100%;border-radius:8px}
+#viewer .vbar{display:flex;gap:8px;justify-content:space-between;padding-top:10px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + var(--safe-b));background:var(--surface2);border:1px solid var(--line);padding:9px 14px;border-radius:12px;font-size:14px;z-index:60;max-width:90%}
+</style>
+</head>
+<body>
+
+<section id="login" class="hidden">
+  <h1 class="wordmark">PERDIMI</h1>
+  <p>Studio</p>
+  <div id="step-email">
+    <input id="login-email" class="field" type="email" autocomplete="email" inputmode="email" placeholder="Your e-mail">
+    <button id="btn-send-code" class="btn primary" style="width:100%;margin-top:10px">Send me a code</button>
+    <p style="margin-top:12px"><a href="#" id="have-code">I already have a code</a></p>
+  </div>
+  <div id="step-code" class="hidden">
+    <p>We sent a 6-digit code to <b id="code-to"></b>. It can take a few minutes on a slow line.</p>
+    <input id="login-code" class="field" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="text-align:center;letter-spacing:.4em;margin-top:10px">
+    <button id="btn-verify" class="btn primary" style="width:100%;margin-top:10px">Sign in</button>
+    <p style="margin-top:12px"><a href="#" id="back-email">Use a different e-mail / send again</a></p>
+  </div>
+  <div class="msg-err" id="login-err"></div>
+</section>
+
+<section id="app" class="hidden">
+  <header>
+    <span class="wordmark">PERDIMI · STUDIO</span>
+    <span style="display:flex;gap:6px;flex-wrap:nowrap"><span class="pill" id="net"><span class="dot"></span><span id="net-label">Online</span></span>
+    <span class="pill" id="budget-pill">£–</span></span>
+  </header>
+  <main>
+    <div class="view" id="view-chat">
+      <div id="threadbar">
+        <select id="thread-select" aria-label="Conversation"></select>
+        <button class="btn small" id="btn-new-thread">New</button>
+      </div>
+      <div id="messages"></div>
+      <div id="composer">
+        <div id="attachments"></div>
+        <div class="row">
+          <label class="iconbtn" aria-label="Add photo or video">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            <input id="file" type="file" accept="image/*,video/*" multiple hidden>
+          </label>
+          <textarea id="input" rows="1" placeholder="Message…"></textarea>
+          <button class="iconbtn send" id="btn-send" aria-label="Send">
+            <svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-7-8-1z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="view hidden" id="view-studio"></div>
+    <div class="view hidden" id="view-post"></div>
+    <div class="view hidden" id="view-site"></div>
+    <div class="view hidden" id="view-more"></div>
+  </main>
+  <nav>
+    <button data-tab="chat" class="on"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat</button>
+    <button data-tab="studio"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg>Studio</button>
+    <button data-tab="post"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>Post</button>
+    <button data-tab="site"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>Site</button>
+    <button data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>More</button>
+  </nav>
+</section>
+
+<div id="viewer" class="hidden">
+  <div class="vbody" id="vbody"></div>
+  <div class="vbar">
+    <button class="btn small" id="v-full">Load full quality</button>
+    <a class="btn small" id="v-dl" href="#">Save</a>
+    <button class="btn small" id="v-close">Close</button>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

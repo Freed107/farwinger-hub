@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PERDIMI Studio Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+:root{--bg:#120e12;--surface:#1b151b;--surface2:#251c25;--line:#3a2c38;--text:#f3ece6;--dim:#a8979f;--copper:#c8835a;--ok:#8fc39b;--warn:#e7c06a;--bad:#e58a83}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;padding:16px;max-width:1100px;margin:0 auto}
+h1{font-family:Georgia,serif;letter-spacing:.3em;font-weight:400;font-size:20px;margin:6px 0 16px}
+h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:500;margin:22px 0 8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sub{color:var(--dim);font-size:13px}
+button,input,textarea,select{font:inherit;color:inherit}
+.btn{padding:7px 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface2);cursor:pointer}
+.btn.primary{background:var(--copper);border-color:var(--copper);color:#1a0f0a;font-weight:600}
+.btn.bad{border-color:var(--bad);color:var(--bad)}
+input,textarea{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%}
+textarea{min-height:90px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+img.t{width:120px;height:120px;object-fit:cover;border-radius:8px;background:#000}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:13px} td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+pre{white-space:pre-wrap;font-size:13px}
+</style>
+</head>
+<body>
+<h1>PERDIMI · STUDIO ADMIN</h1>
+<div id="root"><div class="sub">Loading…</div></div>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { credentials: 'same-origin', ...opts, headers: opts.body ? { 'content-type': 'application/json' } : {} });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.status);
+    return data;
+  }
+  const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
+
+  async function load() {
+    const d = await api('/api/admin/overview');
+    const b = d.budget;
+    const s = d.settings;
+    let html = '';
+
+    html += `<h2>Waiting for you · renders</h2>`;
+    html += d.renders_waiting.length ? d.renders_waiting.map((r) => `<div class="card"><div class="row" style="justify-content:space-between"><b>#${r.id} ${r.kind} · ${r.quality}${r.parent_id ? ' from #' + r.parent_id : ''}</b><span class="warn">${esc(r.hold_reason)}</span></div>
+      <div class="sub">~${r.est_credits ?? '?'} credits${r.est_gbp != null ? ' · ~£' + r.est_gbp : ''}</div><pre>${esc(r.prompt)}</pre>
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-r="${r.id}" data-a="approve">Approve</button><button class="btn bad" data-r="${r.id}" data-a="reject">Reject</button></div></div>`).join('') : '<div class="sub">Nothing waiting.</div>';
+
+    html += `<h2>Website ideas</h2>`;
+    html += d.suggestions.length ? d.suggestions.map((g) => `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(g.title)}</b><span class="tag ${g.status === 'approved' ? 'ok' : g.status === 'rejected' ? 'bad' : 'warn'}">${g.status}</span></div>
+      <div class="sub">${esc(g.page || '')} · ${esc(g.created_at)}</div><pre>${esc(g.detail)}</pre>
+      ${JSON.parse(g.media_ids || '[]').map((id) => `<a href="/media/${id}/full" target="_blank"><img class="t" src="/media/${id}/preview"></a>`).join(' ')}
+      <input placeholder="Note to Blessing (optional)" id="note-${g.id}" value="${esc(g.owner_note || '')}" style="margin-top:8px">
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-g="${g.id}" data-s="approved">Approve</button><button class="btn bad" data-g="${g.id}" data-s="rejected">Reject</button></div></div>`).join('') : '<div class="sub">No ideas yet.</div>';
+
+    html += `<div class="grid2"><div><h2>Render allowance (this month)</h2><div class="card">
+      ${b ? `<div>£${b.spent_gbp} spent of £${b.budget_gbp} · <b>£${b.left_gbp} left</b></div><div class="sub">Discarded: £${b.discarded_gbp} · finals without draft: £${b.final_without_draft_gbp} · jobs: ${b.jobs_this_month}</div>` : '<div class="sub">No creator yet.</div>'}
+      <label class="sub" style="display:block;margin-top:10px">Monthly allowance £</label><input id="set-budget" value="${esc(s.creator_budget_gbp ?? '')}" placeholder="30">
+      <label class="sub" style="display:block;margin-top:8px">£ per Higgsfield credit (empty = every render waits for you)</label><input id="set-credit" value="${esc(s.gbp_per_credit ?? '')}" placeholder="e.g. 0.05">
+      <label class="row" style="margin-top:8px"><input type="checkbox" id="set-paused" style="width:auto" ${s.renders_paused === 'true' ? 'checked' : ''}> Pause all renders</label>
+      <label class="sub" style="display:block;margin-top:8px">Resource links shown to her (JSON: [{"label":"…","url":"…"}])</label>
+      <textarea id="set-links">${esc(s.links || '[]')}</textarea>
+      <button class="btn primary" id="save-settings" style="margin-top:8px">Save settings</button></div></div>
+
+      <div><h2>People & sign-in</h2><div class="card">
+      <table>${d.people.map((p) => `<tr><td>${esc(p.name || '')}<div class="sub">${esc(p.email)}</div></td><td>${p.role}</td><td class="sub">last seen ${esc(p.last_seen || 'never')}</td><td>${p.role === 'owner' ? '' : p.revoked_at ? `<button class="btn" data-p="${p.id}" data-pa="restore">Restore</button>` : `<button class="btn bad" data-p="${p.id}" data-pa="revoke">Revoke</button>`}</td></tr>`).join('')}</table>
+      <div class="row" style="margin-top:10px"><button class="btn" id="make-code">Make a sign-in code for Blessing${d.whatsapp_ready ? ' (WhatsApp)' : ''}</button></div>
+      <div id="code-out" class="sub" style="margin-top:8px"></div></div></div></div>
+
+      <h2>Team tasks</h2>`;
+    html += d.tasks.length ? `<div class="card"><table>${d.tasks.map((t) => `<tr><td><b>${esc(t.title)}</b><div class="sub">${esc(t.team)} · ${t.urgency} · ${esc(t.created_at)}${t.pulled_at ? ' · filed ' + esc(t.ledger_id || '') : ''}</div><div>${esc(t.detail || '')}</div></td>
+      <td style="width:40%"><input id="reply-${t.id}" value="${esc(t.reply || '')}" placeholder="Reply she will see"><div class="row" style="margin-top:6px"><button class="btn" data-t="${t.id}">Save reply</button><button class="btn primary" data-t="${t.id}" data-done="1">${t.done_at ? 'Done ✓' : 'Reply + done'}</button></div></td></tr>`).join('')}</table></div>` : '<div class="sub">No tasks.</div>';
+
+    html += `<h2>Brand knowledge Claude uses</h2><div class="card">
+      <div class="sub">Only PERDIMI / VENENVM / LUCCIVO material. Lines mentioning locked terms are stripped before Claude sees them, but do not rely on that: keep private matters out.</div>
+      <table style="margin:8px 0">${d.knowledge.map((k) => `<tr><td>${esc(k.key)}</td><td class="sub">${k.chars} chars · ${esc(k.updated_at)}</td><td><button class="btn" data-k="${esc(k.key)}">Edit</button> <button class="btn bad" data-kd="${esc(k.key)}">Delete</button></td></tr>`).join('') || '<tr><td class="sub">Empty. Claude will say it has no brand knowledge.</td></tr>'}</table>
+      <input id="k-key" placeholder="Key, e.g. 01-brand-brief"><textarea id="k-body" style="min-height:220px;margin-top:6px" placeholder="Paste the text"></textarea>
+      <button class="btn primary" id="k-save" style="margin-top:8px">Save knowledge</button></div>`;
+
+    html += `<h2>Posts</h2><div class="card"><table>${d.posts.map((p) => `<tr><td>#${p.id} ${esc(p.platform)}</td><td>${p.status}</td><td class="sub">${esc(p.caption.slice(0, 120))}</td><td>${p.url ? `<a href="${esc(p.url)}" target="_blank" style="color:var(--copper)">link</a>` : ''}</td></tr>`).join('') || '<tr><td class="sub">None</td></tr>'}</table></div>`;
+    html += `<h2>Recent renders</h2><div class="card"><table>${d.renders_recent.map((r) => `<tr><td>${r.result_media_id ? `<a href="/media/${r.result_media_id}/full" target="_blank"><img class="t" style="width:60px;height:60px" src="/media/${r.result_media_id}/preview"></a>` : ''}</td><td>#${r.id} ${r.kind}/${r.quality}</td><td>${r.status}${r.verdict ? ' · ' + r.verdict : ''}</td><td>${r.actual_gbp != null ? '£' + r.actual_gbp : r.est_gbp != null ? '~£' + r.est_gbp : ''}</td></tr>`).join('')}</table></div>`;
+    html += `<h2>Audit</h2><div class="card"><table>${d.audit.map((a) => `<tr><td class="sub">${esc(a.at)}</td><td>${esc(a.action)}</td><td class="sub">${esc(a.detail || '')}</td></tr>`).join('')}</table></div>`;
+    $('#root').innerHTML = html;
+  }
+
+  document.addEventListener('click', async (e) => {
+    const t = e.target; const ds = t.dataset || {};
+    try {
+      if (ds.r) { await post(`/api/admin/renders/${ds.r}`, { action: ds.a }); return load(); }
+      if (ds.g) { await post(`/api/admin/suggestions/${ds.g}`, { status: ds.s, note: $(`#note-${ds.g}`).value }); return load(); }
+      if (ds.t) { await post(`/api/admin/tasks/${ds.t}`, { reply: $(`#reply-${ds.t}`).value, done: !!ds.done }); return load(); }
+      if (ds.p) { if (ds.pa === 'revoke' && !confirm('Revoke access now? Her sessions end immediately.')) return; await post(`/api/admin/people/${ds.p}`, { action: ds.pa }); return load(); }
+      if (ds.k) { const k = await api(`/api/admin/knowledge?key=${encodeURIComponent(ds.k)}`); $('#k-key').value = k.key; $('#k-body').value = k.body; $('#k-body').focus(); return; }
+      if (ds.kd) { if (!confirm('Delete ' + ds.kd + '?')) return; await api(`/api/admin/knowledge?key=${encodeURIComponent(ds.kd)}`, { method: 'DELETE' }); return load(); }
+      if (t.id === 'k-save') { await api('/api/admin/knowledge', { method: 'PUT', body: JSON.stringify({ key: $('#k-key').value.trim(), body: $('#k-body').value }) }); return load(); }
+      if (t.id === 'save-settings') {
+        JSON.parse($('#set-links').value || '[]');
+        await post('/api/admin/settings', { creator_budget_gbp: $('#set-budget').value.trim() || '30', gbp_per_credit: $('#set-credit').value.trim(), renders_paused: $('#set-paused').checked ? 'true' : 'false', links: $('#set-links').value.trim() || '[]' });
+        return load();
+      }
+      if (t.id === 'make-code') {
+        const r = await post('/api/admin/login-code');
+        $('#code-out').innerHTML = `Code <b style="font-size:18px;color:var(--text)">${r.code}</b> (valid 24 h).` + (r.whatsapp ? ` <a class="btn primary" href="${r.whatsapp}" target="_blank">Send on WhatsApp</a>` : ' Set the CREATOR_PHONE secret for a one-tap WhatsApp button.');
+      }
+    } catch (err) { alert(err.message); }
+  });
+  load().catch((e) => { $('#root').innerHTML = `<div class="bad">${esc(e.message)}</div>`; });
+})();
+</script>
+</body>
+</html>

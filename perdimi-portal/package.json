@@ -1,0 +1,17 @@
+{
+  "name": "perdimi-creator-portal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute perdimi-creator-portal --remote --file=schema.sql",
+    "check": "node --check src/index.js && node --check src/claude.js && node --check src/lib.js && node --check src/renders.js && node --check public/app.js && node --check public/sw.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.158.0"
+  }
+}

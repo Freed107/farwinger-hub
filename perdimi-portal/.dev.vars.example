@@ -1,0 +1,5 @@
+ANTHROPIC_API_KEY=sk-ant-dummy
+CREATOR_EMAIL=creator@example.com
+CREATOR_PHONE=440000000000
+RUNNER_TOKEN=local-test-token
+# ANTHROPIC_BASE_URL=http://127.0.0.1:8799

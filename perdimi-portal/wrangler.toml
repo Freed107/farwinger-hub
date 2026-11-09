@@ -1,0 +1,64 @@
+# perdimi-creator-portal - Blessing Francis's creator portal for PERDIMI (chat with Claude, renders, posts, site ideas).
+#
+# THIS REPO IS PUBLIC. Nothing private goes in this file or anywhere in perdimi-portal/:
+#   no emails, phone numbers, prices, canon text, API keys or tokens. They are Worker secrets or D1 rows.
+#
+# Deploy into the estate Cloudflare account (the one that holds perdimi.com), NOT whatever account the local
+# wrangler OAuth session happens to be on. Steps: README.md "First deploy".
+name = "perdimi-creator-portal"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Custom domain: uncomment once the Worker is deployed (perdimi.com zone is on the same account).
+# routes = [ { pattern = "studio.perdimi.com", custom_domain = true } ]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "none"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "perdimi-creator-portal"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "perdimi-creator-media"
+
+# Claude answers off a queue, not inside her HTTP request: if her connection drops mid-answer the reply still lands
+# in D1 and appears the next time the phone syncs.
+[[queues.producers]]
+binding = "CHAT_QUEUE"
+queue = "perdimi-creator-chat"
+
+[[queues.consumers]]
+queue = "perdimi-creator-chat"
+max_batch_size = 1
+max_retries = 3
+
+# Every 5 minutes: re-queue any thread stuck "busy" (worker crash, API outage) so no message is ever left unanswered.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+OWNER_EMAIL = "administrator@farwinger.com"
+CLAUDE_MODEL = "claude-opus-5-5"
+CLAUDE_EFFORT = "high"
+# Her free-spend allowance for renders, per calendar month (UTC). Above it, a render waits for Fred.
+CREATOR_BUDGET_GBP = "30"
+# Pounds per Higgsfield credit. EMPTY = unknown = every render waits for Fred until he sets it (fail safe).
+GBP_PER_CREDIT = ""
+MAIL_FROM = "PERDIMI Studio <studio@send.perdimi.com>"
+# Lines of knowledge containing any of these words are never sent to Claude (comma-separated, case-insensitive).
+LOCKED_TERMS = "aichabelle,farwinger,stillroom,hobfolk,sankktum,woodenballs,milk street,orton way,global-vault,h:\\"
+
+# Secrets (wrangler secret put <NAME>), none of them ever in git:
+#   ANTHROPIC_API_KEY   Claude
+#   RESEND_API_KEY      sign-in code e-mails (send.perdimi.com is already verified on Resend)
+#   CREATOR_EMAIL       Blessing's address - the only creator allowed in
+#   CREATOR_PHONE       her WhatsApp number, digits only with country code - used for the "send code by WhatsApp" fallback in /admin
+#   RUNNER_TOKEN        shared with runner/perdimi_portal_runner.py (renders + task pull)
