@@ -9,7 +9,10 @@ export const INDICATIVE_CREDITS = {
 };
 
 export async function createRender(env, person, input) {
-  const kind = input.kind === 'video' ? 'video' : 'image';
+  // Videos exist only inside the reel pipeline (talk -> brief -> storyboard -> 480p -> 720p). See reels.js.
+  if (input.kind === 'video')
+    return { error: 'Videos are made only through a reel: start_reel, agree the brief, approve the storyboard, then 480p, then 720p.' };
+  const kind = 'image';
   const quality = input.quality === 'final' ? 'final' : 'draft';
   const prompt = String(input.prompt || '').trim();
   if (prompt.length < 10) return { error: 'Prompt is too short to render. Describe the shot.' };
@@ -84,7 +87,7 @@ export async function notifyThread(env, threadId, text) {
 export function renderView(r) {
   return {
     id: r.id, kind: r.kind, quality: r.quality, prompt: r.prompt, aspect: r.aspect, seconds: r.seconds,
-    parent_id: r.parent_id, status: r.status, hold_reason: r.hold_reason, verdict: r.verdict,
+    parent_id: r.parent_id, reel_id: r.reel_id, reel_stage: r.reel_stage, frame_no: r.frame_no, resolution: r.resolution, status: r.status, hold_reason: r.hold_reason, verdict: r.verdict,
     est_credits: r.est_credits, est_gbp: r.est_gbp, actual_gbp: r.actual_gbp,
     result_media_id: r.result_media_id, error: r.error, created_at: r.created_at,
   };

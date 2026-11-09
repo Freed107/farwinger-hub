@@ -80,7 +80,11 @@ CREATE TABLE IF NOT EXISTS renders (
   aspect           TEXT NOT NULL DEFAULT '9:16',
   seconds          INTEGER,
   ref_media        TEXT,                      -- JSON array of media ids
-  parent_id        INTEGER,                   -- the kept draft a final is made from
+  parent_id        INTEGER,                   -- the kept draft a final is made from / the approved 480p a 720p is made from
+  reel_id          INTEGER,                   -- set for every reel render (storyboard frame or reel video)
+  reel_stage       TEXT CHECK (reel_stage IN ('storyboard','video_480','video_720')),
+  frame_no         INTEGER,                   -- storyboard frame position (1..n)
+  resolution       TEXT,                      -- '480p' | '720p' for reel videos
   est_credits      REAL,
   est_gbp          REAL,
   actual_credits   REAL,
@@ -94,6 +98,32 @@ CREATE TABLE IF NOT EXISTS renders (
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS renders_status ON renders(status);
+
+CREATE INDEX IF NOT EXISTS renders_reel ON renders(reel_id);
+
+-- Reels follow ONE strict order (Fred, 9 Nov). The server refuses any render out of order:
+--   talk       verbal discussion, bouncing ideas back and forth            (no renders)
+--   brief      character, scene and story/action described and saved       (no renders) -> approve
+--   storyboard picture storyboard, one image per frame = the input frames -> approve
+--   video_480  the reel rendered at 480p from the approved frames         -> approve
+--   video_720  the approved 480p re-rendered at 720p                      -> approve -> done
+CREATE TABLE IF NOT EXISTS reels (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id          INTEGER,
+  created_by         INTEGER NOT NULL,
+  title              TEXT NOT NULL,
+  stage              TEXT NOT NULL DEFAULT 'talk' CHECK (stage IN ('talk','brief','storyboard','video_480','video_720','done')),
+  character          TEXT,
+  scene              TEXT,
+  story              TEXT,                    -- story or action, beat by beat
+  platform           TEXT,
+  seconds            INTEGER NOT NULL DEFAULT 8,
+  frames_json        TEXT,                    -- approved storyboard: JSON [{frame_no, media_id, render_id}]
+  v480_render_id     INTEGER,                 -- approved 480p
+  v720_render_id     INTEGER,                 -- approved 720p
+  created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- Posts she prepares / logs for Meta (Instagram, Facebook) and TikTok.
 CREATE TABLE IF NOT EXISTS posts (

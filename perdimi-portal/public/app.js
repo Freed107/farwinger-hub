@@ -388,11 +388,43 @@
   };
   S.mediaKinds = {};
 
+
+  // ------------------------------------------------------------------ reels (strict order)
+  const STEPS = [['talk', 'Talk'], ['brief', 'Brief'], ['storyboard', 'Storyboard'], ['video_480', '480p'], ['video_720', '720p'], ['done', 'Done']];
+  const APPROVE_LABEL = { brief: 'Approve brief', storyboard: 'Approve storyboard', video_480: 'Approve 480p', video_720: 'Approve 720p' };
+  function reelsHtml(reels) {
+    let h = '<h2>Reels</h2><div class="sub" style="margin:-4px 0 10px">Talk → Brief → Storyboard → 480p → 720p. One step at a time.</div>';
+    h += '<button class="btn small primary" data-act="new-reel" style="margin-bottom:12px">Start a new reel</button>';
+    if (!reels.length) return h + '<div class="empty">No reels yet.</div>';
+    for (const x of reels) {
+      const at = STEPS.findIndex(([k]) => k === x.stage);
+      const stepper = STEPS.map(([k, l], i) => `<span class="tag ${i < at ? 'ok' : i === at ? 'warn' : ''}" style="margin:0 4px 4px 0;display:inline-block">${i < at ? '✓ ' : ''}${l}</span>`).join('');
+      const frames = x.renders.filter((r) => r.reel_stage === 'storyboard');
+      const vids = x.renders.filter((r) => r.reel_stage !== 'storyboard');
+      const thumb = (r) => r.result_media_id
+        ? `<img loading="lazy" src="/media/${encodeURIComponent(r.result_media_id)}/preview" data-media="${esc(r.result_media_id)}" alt="">`
+        : `<div class="thumb-ph" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dim)">${esc((STATUS[r.status] || [r.status])[0])}</div>`;
+      h += `<div class="card reel" data-reel="${x.id}">
+        <div class="top"><b>${esc(x.title)}</b><span class="sub">#${x.id}</span></div>
+        <div>${stepper}</div>
+        ${x.character || x.scene || x.story ? `<div class="caption"><b>Character</b> ${esc(x.character || '–')}\n<b>Scene</b> ${esc(x.scene || '–')}\n<b>Story / action</b> ${esc(x.story || '–')}</div>` : ''}
+        ${frames.length ? `<div class="sub" style="margin-top:10px">Storyboard frames</div><div class="grid" style="margin-top:6px">${frames.map((r) => `<div>${thumb(r)}<div class="sub" style="font-size:11px">F${r.frame_no}${r.verdict === 'discard' ? ' · discarded' : ''}</div>${r.status === 'done' && x.stage === 'storyboard' && r.verdict !== 'discard' ? `<button class="btn small" data-act="discard" data-rid="${r.id}" style="padding:3px 7px;font-size:11px">Discard</button>` : ''}</div>`).join('')}</div>` : ''}
+        ${vids.length ? `<div class="sub" style="margin-top:10px">Videos</div><div class="grid" style="margin-top:6px">${vids.map((r) => `<div>${thumb(r)}<div class="sub" style="font-size:11px">${esc(r.resolution || '')}${r.verdict === 'keep' ? ' · approved' : r.verdict === 'discard' ? ' · discarded' : ''}</div></div>`).join('')}</div>` : ''}
+        <div class="sub" style="margin-top:8px">${x.stage === 'done' ? 'Done. Ask in Chat to prepare the post.' : x.approve_blocker ? 'Next: ' + esc(x.approve_blocker) : 'Ready for your approval.'}</div>
+        <div class="actions">
+          ${APPROVE_LABEL[x.stage] ? `<button class="btn small primary" data-act="approve" ${x.can_approve ? '' : 'disabled'}>${APPROVE_LABEL[x.stage]}</button>` : ''}
+          ${['storyboard', 'video_480', 'video_720', 'done'].includes(x.stage) ? '<button class="btn small" data-act="back">Back one step</button>' : ''}
+          <button class="btn small" data-act="discuss">Discuss in Chat</button>
+        </div></div>`;
+    }
+    return h;
+  }
+
   async function loadStudio() {
     const v = $('#view-studio');
     v.innerHTML = '<div class="empty">Loading…</div>';
-    let r, media;
-    try { [r, media] = await Promise.all([api('/api/renders'), api('/api/media')]); }
+    let r, media, reels;
+    try { [r, media, reels] = await Promise.all([api('/api/renders'), api('/api/media'), api('/api/reels')]); }
     catch { v.innerHTML = '<div class="empty">No connection. Pull down later to retry.</div>'; return; }
     media.media.forEach((m) => (S.mediaKinds[m.id] = m.kind));
     const b = r.budget; renderBudget(b);
@@ -403,10 +435,12 @@
       <div class="sub">Spent on discarded renders: £${b.discarded_gbp.toFixed(2)}${b.final_without_draft_gbp ? ` · finals without a draft: £${b.final_without_draft_gbp.toFixed(2)}` : ''}</div>
       ${!b.gbp_per_credit_known ? '<div class="sub" style="margin-top:6px;color:var(--warn)">Credit price not set yet: every render waits for Fred.</div>' : ''}
       ${b.renders_paused ? '<div class="sub" style="margin-top:6px;color:var(--warn)">Renders are paused by Fred.</div>' : ''}
-      <div class="sub" style="margin-top:6px">Rule: cheap draft first, then make the kept one final.</div></div>`;
-    html += '<h2>Renders</h2>';
-    if (!r.renders.length) html += '<div class="empty">No renders yet. Ask in Chat, e.g. "draft an image of…"</div>';
-    for (const x of r.renders) {
+      <div class="sub" style="margin-top:6px">Reels: storyboard, then 480p, then 720p. Stills: draft first, then final.</div></div>`;
+    html += reelsHtml(reels.reels);
+    const stills = r.renders.filter((x) => !x.reel_id);
+    html += '<h2>Still images</h2>';
+    if (!stills.length) html += '<div class="empty">No still images yet. Ask in Chat, e.g. "draft an image of…"</div>';
+    for (const x of stills) {
       const [label, cls] = STATUS[x.status] || [x.status, ''];
       const cost = x.actual_gbp != null ? `£${x.actual_gbp.toFixed(2)}` : x.est_gbp != null ? `~£${x.est_gbp.toFixed(2)}` : x.est_credits ? `~${x.est_credits} cr` : '';
       const mediaHtml = x.result_media_id
@@ -434,6 +468,22 @@
   $('#view-studio').addEventListener('click', async (e) => {
     const id = e.target?.dataset?.media; if (id) return openViewer(id);
     const act = e.target?.dataset?.act; if (!act) return;
+    if (act === 'new-reel') { showTab('chat'); input.value = 'I want to make a new reel. My idea: '; input.focus(); return; }
+    const reelCard = e.target.closest('.reel');
+    if (reelCard) {
+      const reelId = reelCard.dataset.reel;
+      try {
+        if (act === 'approve') {
+          if (!confirm(e.target.textContent + '? The next step starts from this.')) return;
+          const r = await api(`/api/reels/${reelId}/approve`, { method: 'POST' }); toast('Approved. Next: ' + r.stage.replace('video_', '') );
+        }
+        if (act === 'back') { if (!confirm('Go back one step? Nothing is deleted.')) return; await api(`/api/reels/${reelId}/back`, { method: 'POST' }); }
+        if (act === 'discard') await api(`/api/renders/${e.target.dataset.rid}/verdict`, { method: 'POST', body: JSON.stringify({ verdict: 'discard' }) });
+        if (act === 'discuss') { showTab('chat'); input.value = `About reel #${reelId}: `; input.focus(); return; }
+        loadStudio(); refreshBudget();
+      } catch (err) { toast(err.message, 4000); }
+      return;
+    }
     const rid = e.target.closest('.card').dataset.id;
     try {
       if (act === 'keep' || act === 'discard') await api(`/api/renders/${rid}/verdict`, { method: 'POST', body: JSON.stringify({ verdict: act }) });

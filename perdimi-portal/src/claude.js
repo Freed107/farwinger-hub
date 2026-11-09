@@ -4,6 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { budgetStatus, parseJsonArray, audit } from './lib.js';
 import { createRender, renderView, INDICATIVE_CREDITS } from './renders.js';
+import { startReel, saveBrief, renderStoryboard, renderReelVideo, reelView, getReel, STAGE_LABEL } from './reels.js';
 
 const TEAMS = ['seo', 'marketing', 'creative_director', 'film_crew', 'fred'];
 
@@ -27,11 +28,22 @@ THE BUILD PRINCIPLES (how we work)
 - Route work to the people who own it (use create_task): SEO team (keywords, titles, hashtags strategy, site search), marketing (campaigns, calendars, influencer outreach), creative director (taste, brand fit, final look sign-off), film crew (real shoots, locations, physical props), Fred (anything needing the owner's decision).
 - Style references come from the PERDIMI Pinterest boards and the shared Google Drive folder (links below).
 
-RENDERS AND MONEY - FRED'S RULES, NOT GUIDANCE (she cannot overrule these; Fred can)
-- Low quality first, always: every image or video starts as a cheap draft. Only a draft she has kept gets made final in high resolution. Lock the still image before making any video from it ("images are cheap, videos are expensive").
-- Before every render, tell her the indicative cost in credits and what it is for. The real cost is checked automatically before anything runs.
-- She can spend up to her monthly allowance without asking. Above it, or a final without a kept draft, the job waits for Fred automatically - tell her that plainly.
-- If she is burning money (re-rolling the same prompt, finals without drafts, many discarded renders), say so with the figures from budget_status: how much was spent on discards this month and how to avoid it (fix the prompt, change one thing at a time, use edits instead of re-rolls).
+REELS - FRED'S STRICT FORMAT (she cannot skip a step; the portal refuses anything out of order)
+Every reel goes through these steps, in this order, one at a time:
+1. Verbal. Talk. Bounce ideas back and forth with her. No renders. Ask questions, push back, offer options. Use start_reel as soon as she wants to make a reel, so it is tracked.
+2. Describe the character and the scene, and determine the story or action, beat by beat. Write it with save_reel_brief. She approves the brief herself in Studio > Reels (tap Approve). You cannot approve for her.
+3. Picture storyboard: once the brief is approved, render_storyboard makes one still image per frame. These frames become the input frames for the video, so each frame must show exactly what that moment of the reel needs. She keeps or discards frames, re-does any that are wrong, then taps Approve storyboard.
+4. Once the storyboard is approved: render_reel_video renders the reel at 480p from the approved frames. She watches it and approves it, or you go again at 480p.
+5. Once the 480p is approved: render_reel_video again renders the same reel at 720p. She approves it, and the reel is done and ready for prepare_post.
+- Never offer to jump ahead (no video before an approved storyboard, no 720p before an approved 480p). If she wants to change an earlier step, she taps "Back" on the reel (nothing is lost; old versions stay).
+- Always say which step the reel is at and what the next step is. Use list_reels when unsure.
+- iPhone dictation (the microphone on her keyboard) works in this chat if she prefers to talk.
+
+STILL IMAGES (for photo posts) AND MONEY - FRED'S RULES (she cannot overrule these; Fred can)
+- Still images for photo posts: request_render, draft first; only a draft she kept is made final.
+- Before every render, tell her the indicative cost in credits and what it is for. The real cost is checked automatically, for free, before anything runs.
+- She can spend up to her monthly allowance without asking. Above it, the job waits for Fred automatically - tell her that plainly.
+- If she is burning money (re-rolling the same prompt, many discarded frames or videos), say so with the figures from budget_status: how much was spent on discards this month and how to avoid it (fix the prompt, change one thing at a time, use edits instead of re-rolls).
 - Claude itself (this chat) has no spending limit. Only renders are budgeted.
 
 WEBSITE
@@ -47,11 +59,11 @@ const TOOLS = [
   {
     name: 'request_render',
     description:
-      'Queue an AI image or video render. Always start with quality "draft". Use "final" only to upscale a draft she kept (pass parent_id). The real cost is checked for free before it runs; jobs over her allowance or finals without a kept draft wait for Fred automatically.',
+      'Queue a still IMAGE render for a photo post (videos only go through the reel steps). Always start with quality "draft". Use "final" only to upscale a draft she kept (pass parent_id). The real cost is checked for free before it runs; jobs over her allowance or finals without a kept draft wait for Fred automatically.',
     input_schema: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['image', 'video'] },
+        kind: { type: 'string', enum: ['image'] },
         quality: { type: 'string', enum: ['draft', 'final'] },
         prompt: { type: 'string', description: 'Full production prompt: subject, wardrobe, location, light, camera, mood. Positive statements only.' },
         aspect: { type: 'string', enum: ['9:16', '4:5', '1:1', '16:9'] },
@@ -62,6 +74,76 @@ const TOOLS = [
       required: ['kind', 'quality', 'prompt'],
       additionalProperties: false,
     },
+  },
+  {
+    name: 'start_reel',
+    description: 'Step 1 (Verbal). Open a new reel as soon as she wants to make one, so every later step is tracked. No rendering happens here.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        platform: { type: 'string', enum: ['instagram', 'facebook', 'tiktok', 'threads'] },
+        seconds: { type: 'integer', description: 'Target length, 3-15 s.' },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'save_reel_brief',
+    description: 'Step 2. Save the agreed character, scene and story/action (beat by beat). Allowed only before the brief is approved. She approves it herself in Studio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reel_id: { type: 'integer' },
+        character: { type: 'string', description: 'Who is on screen: look, age, hair, wardrobe, jewellery, expression, how she moves.' },
+        scene: { type: 'string', description: 'Where: location, time, light, palette, props, camera feel.' },
+        story: { type: 'string', description: 'The story or action, beat by beat with rough timings, ending on the payoff.' },
+        seconds: { type: 'integer' },
+      },
+      required: ['reel_id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'render_storyboard',
+    description: 'Step 3. Render the picture storyboard: one still per frame, in order. Only works after she has approved the brief. These frames become the input frames for the video. Re-render a single frame by sending just that frame_no.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reel_id: { type: 'integer' },
+        frames: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              frame_no: { type: 'integer' },
+              prompt: { type: 'string', description: 'Full still-image prompt for this exact moment, consistent character and scene across frames.' },
+              ref_media: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['frame_no', 'prompt'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['reel_id', 'frames'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'render_reel_video',
+    description: 'Steps 4 and 5. At the 480p step: renders the reel at 480p from the approved storyboard frames (prompt = the motion/action direction). At the 720p step (after she approved the 480p): renders the approved 480p again at 720p (prompt is ignored). Refused at any other step.',
+    input_schema: {
+      type: 'object',
+      properties: { reel_id: { type: 'integer' }, prompt: { type: 'string', description: 'Motion and camera direction for the 480p video.' } },
+      required: ['reel_id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_reels',
+    description: 'Her reels with their current step, what blocks approval, and the renders made for each.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'list_renders',
@@ -233,6 +315,31 @@ async function runTool(env, person, threadId, name, input) {
       if (r.error) return { error: r.error };
       const ind = INDICATIVE_CREDITS[input.kind === 'video' ? 'video' : 'image'][input.quality === 'final' ? 'final' : 'draft'];
       return { render_id: r.id, status: r.status, indicative_credits: ind, note: r.note, budget: await budgetStatus(env, person.id) };
+    }
+    case 'start_reel': {
+      const r = await startReel(env, person, { ...input, thread_id: threadId });
+      return { reel_id: r.id, stage: STAGE_LABEL[r.stage], next: 'Talk it through, then save_reel_brief.' };
+    }
+    case 'save_reel_brief':
+      return await saveBrief(env, person, input.reel_id, input);
+    case 'render_storyboard': {
+      const r = await renderStoryboard(env, person, input.reel_id, input.frames);
+      return r.error ? r : { ...r, budget: await budgetStatus(env, person.id) };
+    }
+    case 'render_reel_video': {
+      const r = await renderReelVideo(env, person, input.reel_id, input);
+      return r.error ? r : { ...r, budget: await budgetStatus(env, person.id) };
+    }
+    case 'list_reels': {
+      const { results } = await env.DB.prepare('SELECT * FROM reels WHERE created_by = ? ORDER BY id DESC LIMIT 10').bind(person.id).all();
+      const out = [];
+      for (const reel of results) {
+        const v = await reelView(env, reel);
+        out.push({ id: v.id, title: v.title, step: v.stage_label, character: v.character, scene: v.scene, story: v.story,
+          approve_blocker: v.approve_blocker, approved_frames: v.frames,
+          renders: v.renders.map((r) => ({ id: r.id, step: r.reel_stage, frame_no: r.frame_no, resolution: r.resolution, status: r.status, verdict: r.verdict, media_id: r.result_media_id })) });
+      }
+      return { reels: out };
     }
     case 'list_renders': {
       const lim = Math.min(30, Math.max(1, input.limit || 10));

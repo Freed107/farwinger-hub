@@ -65,6 +65,8 @@ pre{white-space:pre-wrap;font-size:13px}
       ${b ? `<div>£${b.spent_gbp} spent of £${b.budget_gbp} · <b>£${b.left_gbp} left</b></div><div class="sub">Discarded: £${b.discarded_gbp} · finals without draft: £${b.final_without_draft_gbp} · jobs: ${b.jobs_this_month}</div>` : '<div class="sub">No creator yet.</div>'}
       <label class="sub" style="display:block;margin-top:10px">Monthly allowance £</label><input id="set-budget" value="${esc(s.creator_budget_gbp ?? '')}" placeholder="30">
       <label class="sub" style="display:block;margin-top:8px">£ per Higgsfield credit (empty = every render waits for you)</label><input id="set-credit" value="${esc(s.gbp_per_credit ?? '')}" placeholder="e.g. 0.05">
+      <label class="sub" style="display:block;margin-top:8px">Who approves reel steps (brief, storyboard, 480p, 720p)</label>
+      <select id="set-approver" style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:8px"><option value="creator" ${s.reel_approver !== 'owner' ? 'selected' : ''}>Blessing (you can too)</option><option value="owner" ${s.reel_approver === 'owner' ? 'selected' : ''}>Only me</option></select>
       <label class="row" style="margin-top:8px"><input type="checkbox" id="set-paused" style="width:auto" ${s.renders_paused === 'true' ? 'checked' : ''}> Pause all renders</label>
       <label class="sub" style="display:block;margin-top:8px">Resource links shown to her (JSON: [{"label":"…","url":"…"}])</label>
       <textarea id="set-links">${esc(s.links || '[]')}</textarea>
@@ -75,7 +77,9 @@ pre{white-space:pre-wrap;font-size:13px}
       <div class="row" style="margin-top:10px"><button class="btn" id="make-code">Make a sign-in code for Blessing${d.whatsapp_ready ? ' (WhatsApp)' : ''}</button></div>
       <div id="code-out" class="sub" style="margin-top:8px"></div></div></div></div>
 
-      <h2>Team tasks</h2>`;
+      <h2>Reels</h2>`;
+    html += d.reels.length ? `<div class="card"><table>${d.reels.map((x) => `<tr><td><b>#${x.id} ${esc(x.title)}</b><div class="sub">${esc((x.story || '').slice(0, 160))}</div></td><td>${esc(x.stage)}</td><td><button class="btn" data-reel="${x.id}">Approve step</button> <button class="btn" data-reelback="${x.id}">Back</button></td></tr>`).join('')}</table></div>` : '<div class="sub">No reels yet.</div>';
+    html += `<h2>Team tasks</h2>`;
     html += d.tasks.length ? `<div class="card"><table>${d.tasks.map((t) => `<tr><td><b>${esc(t.title)}</b><div class="sub">${esc(t.team)} · ${t.urgency} · ${esc(t.created_at)}${t.pulled_at ? ' · filed ' + esc(t.ledger_id || '') : ''}</div><div>${esc(t.detail || '')}</div></td>
       <td style="width:40%"><input id="reply-${t.id}" value="${esc(t.reply || '')}" placeholder="Reply she will see"><div class="row" style="margin-top:6px"><button class="btn" data-t="${t.id}">Save reply</button><button class="btn primary" data-t="${t.id}" data-done="1">${t.done_at ? 'Done ✓' : 'Reply + done'}</button></div></td></tr>`).join('')}</table></div>` : '<div class="sub">No tasks.</div>';
 
@@ -94,6 +98,8 @@ pre{white-space:pre-wrap;font-size:13px}
   document.addEventListener('click', async (e) => {
     const t = e.target; const ds = t.dataset || {};
     try {
+      if (ds.reel) { await post(`/api/reels/${ds.reel}/approve`); return load(); }
+      if (ds.reelback) { await post(`/api/reels/${ds.reelback}/back`); return load(); }
       if (ds.r) { await post(`/api/admin/renders/${ds.r}`, { action: ds.a }); return load(); }
       if (ds.g) { await post(`/api/admin/suggestions/${ds.g}`, { status: ds.s, note: $(`#note-${ds.g}`).value }); return load(); }
       if (ds.t) { await post(`/api/admin/tasks/${ds.t}`, { reply: $(`#reply-${ds.t}`).value, done: !!ds.done }); return load(); }
@@ -103,7 +109,7 @@ pre{white-space:pre-wrap;font-size:13px}
       if (t.id === 'k-save') { await api('/api/admin/knowledge', { method: 'PUT', body: JSON.stringify({ key: $('#k-key').value.trim(), body: $('#k-body').value }) }); return load(); }
       if (t.id === 'save-settings') {
         JSON.parse($('#set-links').value || '[]');
-        await post('/api/admin/settings', { creator_budget_gbp: $('#set-budget').value.trim() || '30', gbp_per_credit: $('#set-credit').value.trim(), renders_paused: $('#set-paused').checked ? 'true' : 'false', links: $('#set-links').value.trim() || '[]' });
+        await post('/api/admin/settings', { creator_budget_gbp: $('#set-budget').value.trim() || '30', gbp_per_credit: $('#set-credit').value.trim(), renders_paused: $('#set-paused').checked ? 'true' : 'false', reel_approver: $('#set-approver').value, links: $('#set-links').value.trim() || '[]' });
         return load();
       }
       if (t.id === 'make-code') {

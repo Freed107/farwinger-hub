@@ -9,7 +9,7 @@ This is Blessing Francis's portal for making PERDIMI social media. It runs on on
 | Tab | What it does |
 |---|---|
 | **Chat** | An instant chat with Claude (`claude-opus-5-5`, no spend cap). She can attach photos and videos. Claude guides her, but she can overrule it. Claude acts through tools: renders, posts, site ideas and team tasks. |
-| **Studio** | Her renders, with status, cost, Keep / Discard / **Make final (HD)** / Cancel, and her monthly £ allowance. It also shows how much she has spent on discarded renders. |
+| **Studio** | **Reels**, each with its step tracker and Approve / Back buttons. Her still images, with Keep / Discard / Make final / Cancel. Her monthly £ allowance, including how much she has spent on discarded renders. |
 | **Post** | Posts that are ready to go: Save the media, Copy the caption, open Instagram / Facebook / TikTok / Threads, then *Mark posted* with the link. |
 | **Site** | Website ideas for perdimi.com. **Nothing changes on the site until Fred approves the idea in /admin.** |
 | **More** | Resource links (Drive folder, Pinterest boards), replies from the team (SEO, marketing, creative director, film crew, Fred), and sign-out. |
@@ -22,11 +22,25 @@ How it copes with a bad connection:
 - Sign-in is a 6-digit code she types in, so the session lands in the home-screen app and not in Safari. Sessions last 180 days.
 - If e-mail doesn't arrive, Fred taps **Make a sign-in code → Send on WhatsApp** in `/admin`.
 
+## Reels: one strict order (Fred, 9 Nov)
+
+| Step | What happens | Renders allowed |
+|---|---|---|
+| 1. Verbal (Talk) | Discussion: bouncing ideas back and forth in Chat. iPhone keyboard dictation works. | none |
+| 2. Brief | Describe the character and the scene, and decide the story or action. Claude saves it, then she taps **Approve brief**. | none |
+| 3. Storyboard | A picture storyboard, one still per frame. These frames are the video's input frames. She discards and redoes frames, then taps **Approve storyboard**. | storyboard stills only |
+| 4. Video 480p | The reel is rendered at 480p from the approved frames. She taps **Approve 480p**, or the step is redone. | 480p only |
+| 5. Video 720p | The approved 480p is rendered at 720p. She taps **Approve 720p**, and the reel is done. | 720p only |
+
+The server refuses any render that is out of order: no video without an approved storyboard, no 720p without an approved 480p. Videos cannot be made outside a reel at all.
+- **Back one step** reopens the previous step. Every earlier render stays as a version, so nothing is overwritten.
+- **Who approves:** Blessing by default, and Fred can always approve too. In /admin you can set *Only me*.
+
 ## Fred's rules, enforced in code
 
 These are not just prompt text.
 
-- **Low quality first.** A `final` render needs a draft she has kept. A final made without one goes to Fred for approval.
+- **Low quality first.** Reels go storyboard, then 480p, then 720p (see above). A final still image needs a draft she has kept. A final made without one goes to Fred.
 - **£30 a month without asking** (`CREATOR_BUDGET_GBP`, which can be changed in /admin). The real cost comes from the runner's **free** Higgsfield preflight *before* anything is spent. Above the allowance, the job waits for Fred.
 - **Unknown credit price means everything waits for Fred.** Set *£ per Higgsfield credit* in /admin. This is the fail-safe default.
 - **Website changes need Fred's approval.** Site ideas only go into a queue that only Fred can decide on.
@@ -82,7 +96,13 @@ HF_RENDER_CMD=<command printing {"file": "<path>", "credits": N} for the job JSO
 KNOWLEDGE_FILES=<path to PERDIMI canon .md>;<path to style book .md>
 ```
 
-**The Higgsfield calls are deliberately not hard-coded.** Plug in the estate's existing Higgsfield tooling (its free preflight, its draft/final flow, and its `--authorised-by` / `--max-usd` gate) through these two templates. The job JSON contains `kind`, `quality`, `prompt`, `aspect`, `seconds`, `ref_files` (downloaded refs) and `parent_media_id` (the kept draft, for a final).
+**The Higgsfield calls are deliberately not hard-coded.** Plug in the estate's existing Higgsfield tooling (its free preflight, its draft/final flow, and its `--authorised-by` / `--max-usd` gate) through these two templates. The job JSON contains:
+- `kind`, `quality`, `prompt`, `aspect`, `seconds`
+- `reel_stage` (`storyboard` / `video_480` / `video_720`), `frame_no` and `resolution` (`480p` / `720p`)
+- `ref_files`: the downloaded refs. For a reel video these are the approved storyboard frames, in order (the input frames).
+- `parent_media_id`: the approved 480p, for a 720p job. It is also the kept draft, for a final still.
+
+**Render reel videos at exactly the `resolution` given.** Never upscale.
 
 ## Not done here: these need Fred
 

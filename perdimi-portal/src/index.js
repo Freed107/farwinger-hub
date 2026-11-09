@@ -5,6 +5,7 @@ import {
 } from './lib.js';
 import { answerThread } from './claude.js';
 import { createRender, applyEstimate, notifyThread, renderView } from './renders.js';
+import { startReel, approveStage, reopenStage, reelView } from './reels.js';
 
 const MAX_SIMPLE_UPLOAD = 20 * 1024 * 1024; // images, previews, short clips in one request
 const route = (method, pattern) => ({ method, re: new RegExp('^' + pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$') });
@@ -274,6 +275,7 @@ async function appApi(request, env, url, person, ctx) {
   if ((p = m(route('POST', '/api/renders/:id/final')))) {
     const draft = await env.DB.prepare('SELECT * FROM renders WHERE id = ? AND requested_by = ?').bind(p.id, person.id).first();
     if (!draft) return err(404, 'no such render');
+    if (draft.reel_id) return err(400, 'Reel renders move on by approving the reel step, not by "make final".');
     const r = await createRender(env, person, {
       kind: draft.kind, quality: 'final', prompt: draft.prompt, aspect: draft.aspect, seconds: draft.seconds,
       ref_media: parseJsonArray(draft.ref_media), parent_id: draft.id, thread_id: draft.thread_id,
@@ -286,6 +288,29 @@ async function appApi(request, env, url, person, ctx) {
        WHERE id = ? AND requested_by = ? AND status IN ('estimating','awaiting_owner','approved') RETURNING id`
     ).bind(p.id, person.id).first();
     return r ? json({ ok: true }) : err(400, 'Too late to cancel: it is already rendering or finished.');
+  }
+
+  // ---- reels (strict: talk -> brief -> storyboard -> 480p -> 720p) ----
+  if (path === '/api/reels' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM reels WHERE created_by = ? OR ? = 'owner' ORDER BY updated_at DESC LIMIT 30`
+    ).bind(person.id, person.role).all();
+    const reels = [];
+    for (const r of results) reels.push(await reelView(env, r));
+    return json({ reels });
+  }
+  if (path === '/api/reels' && method === 'POST') {
+    const b = await request.json().catch(() => ({}));
+    const r = await startReel(env, person, b);
+    return json({ reel: await reelView(env, r) });
+  }
+  if ((p = m(route('POST', '/api/reels/:id/approve')))) {
+    const r = await approveStage(env, person, parseInt(p.id, 10));
+    return r.error ? err(400, r.error) : json(r);
+  }
+  if ((p = m(route('POST', '/api/reels/:id/back')))) {
+    const r = await reopenStage(env, person, parseInt(p.id, 10));
+    return r.error ? err(400, r.error) : json(r);
   }
 
   // ---- posts ----
@@ -391,6 +416,7 @@ async function adminApi(request, env, url, person) {
       people: await q(`SELECT id, email, name, role, created_at, revoked_at,
                          (SELECT MAX(last_seen) FROM sessions s WHERE s.person_id = people.id) AS last_seen FROM people`),
       knowledge: await q(`SELECT key, length(body) AS chars, updated_at FROM knowledge ORDER BY key`),
+      reels: await q(`SELECT id, title, stage, character, scene, story, updated_at FROM reels ORDER BY updated_at DESC LIMIT 20`),
       settings: Object.fromEntries((await q(`SELECT key, value FROM settings`)).map((r) => [r.key, r.value])),
       budget: creator ? await budgetStatus(env, creator.id) : null,
       audit: await q(`SELECT * FROM audit ORDER BY id DESC LIMIT 60`),
@@ -447,7 +473,7 @@ async function adminApi(request, env, url, person) {
 
   if (path === '/api/admin/settings' && method === 'POST') {
     const b = await request.json().catch(() => ({}));
-    const allowed = ['creator_budget_gbp', 'gbp_per_credit', 'renders_paused', 'links'];
+    const allowed = ['creator_budget_gbp', 'gbp_per_credit', 'renders_paused', 'links', 'reel_approver'];
     for (const k of allowed) if (k in b) await setSetting(env, k, typeof b[k] === 'string' ? b[k] : JSON.stringify(b[k]));
     await audit(env, person.id, 'settings', Object.keys(b).join(','));
     return json({ ok: true });
@@ -560,7 +586,9 @@ async function runnerApi(request, env, url) {
       `UPDATE renders SET status = 'done', actual_credits = ?, actual_gbp = ?, updated_at = datetime('now') WHERE id = ?`
     ).bind(credits, perCredit != null && credits != null ? Math.round(credits * perCredit * 100) / 100 : null, job.id).run();
     await notifyThread(env, job.thread_id,
-      `Render #${job.id} is ready (${job.kind}, ${job.quality}). It's in Studio, media id ${job.result_media_id}. Keep it or discard it there${job.quality === 'draft' ? '; a kept draft can be made final' : ''}.`);
+      job.reel_id
+        ? `Reel #${job.reel_id}: ${job.reel_stage === 'storyboard' ? `storyboard frame ${job.frame_no}` : `${job.resolution} video`} is ready (render #${job.id}, media ${job.result_media_id}). Look at it in Studio > Reels: approve the step, or redo it.`
+        : `Render #${job.id} is ready (${job.kind}, ${job.quality}). It's in Studio, media id ${job.result_media_id}. Keep it or discard it there${job.quality === 'draft' ? '; a kept draft can be made final' : ''}.`);
     return json({ ok: true });
   }
   if ((p = m(route('POST', '/api/runner/renders/:id/fail')))) {
