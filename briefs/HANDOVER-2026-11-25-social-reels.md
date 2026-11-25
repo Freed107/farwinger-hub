@@ -7,6 +7,13 @@ logged in, so nothing below has been run. Every number has to be read fresh on t
 You are working on Fred's PC. Do two jobs from the farwinger-hub repo, branch
 `claude/social-media-posting-strategy-yjhn87` (git fetch it; read both briefs in `briefs/` in full first):
 
+JOB 0 — URGENT: Facebook
+The channel plan has NO facebook:farwinger or facebook:woodenballsco lane (only instagram x2, tiktok:wbc, youtube:wbc).
+Fred wants both on Facebook now. Confirm the Facebook Pages exist and are linked to the Business portfolio, then add
+facebook:farwinger (same clips and cadence as instagram:farwinger) and facebook:woodenballsco (same as instagram:woodenballsco)
+as Graph API Page video_reels lanes using the existing System User token (add pages_manage_posts if it's missing).
+Post one test reel to each, read it back, and record the permalinks. Add both lanes to the heartbeat and the analyst.
+
 JOB 1 — @woodenballsco re-edits + reel analyst
 Brief: briefs/2026-11-25_WBC-reedit-and-reel-analyst.md
 Vault: H:\Farwinger-Vault\_OPERATIONS\shortform\  (queue: _OPERATIONS\monitoring\shortform-queue.json,
