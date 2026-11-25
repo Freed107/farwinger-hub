@@ -11,6 +11,15 @@ vault `H:\Farwinger-Vault\_OPERATIONS\shortform\`.
   (fingerprint match) and limits its reach. A different edit is a different video; the same file is not.
 - **WBC gets its own edits, target ~20 s (18–24 s), built from 2+ takes of the same scene.**
 
+## 0b. Approved strategy (Fred, 2026-11-25)
+
+1. Originals only on WBC: nothing ever posted on @farwinger.
+2. Two formats, 10 posts each: **A** = 20 s multi-take W## edits (section 1); **B** = 8–12 s single takes never
+   posted on @farwinger. B isolates "repost penalty" from "too short".
+3. Retail framing: last seconds show the finished product, size and wood, then "shop link in bio". @farwinger stays the workshop.
+4. 3 posts a week, alternating A/B, posted as Instagram Trial Reels (non-followers first).
+5. After 10 of each: compare day-7 median views; the winner becomes the WBC format, then test hook or caption next.
+
 ## 1. Editor (Nick) — WBC cut spec
 
 Every WBC reel is a NEW edit. Never upload a file that has been posted on @farwinger, trimmed or not.
