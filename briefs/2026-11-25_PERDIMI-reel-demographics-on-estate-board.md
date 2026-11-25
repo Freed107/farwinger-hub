@@ -49,3 +49,16 @@ so each reel card can be compared with it. Mark buckets that differ by ±10 pts 
 - The reader writes the demographics for every qualifying reel (or the explicit "no data" reason) and they show on both boards.
 - One screenshot of the strip goes to Fred.
 - No browser scraping of Instagram insights without Fred's explicit yes.
+
+## 5. Field data from Fred (Instagram app, 25 Nov 2026) — seed the board with these
+
+| Reel | Top countries | Non-followers | Likes / saves |
+|---|---|---|---|
+| Posted while Fred was in Turkey (hair/arm, car park) | TR 23.3, US 9.4, DE 8.8, FR 5.7, IT 4.8 | 99 % | 16 / 8 |
+| Jewellery close-up (black lace) | SA 18.6, IR 16.2, IQ 5.9, MA 4.4, BH 4.4 | 97 % | 4 / 1 |
+| Street / group in black coats | IN 33.7, TR 8, UK 6.7, IR 6.1, PK 3.7 | 95 % | 2 / 1 |
+
+- Fred: posting from Turkey got more views in Turkey. Add a `posted_from` field (country) per reel and show it on the card.
+- The UK share is small on every reel and followers are almost nobody. Flag a reel's top country when it's outside the target market.
+- The Instagram app DOES show per-reel country/age/gender (Audience tab). The API doesn't. Until there's a sanctioned way in,
+  Fred enters it by hand: add a small "paste audience" form on the board (top 5 countries %, gender %, top age band).
