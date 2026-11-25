@@ -58,7 +58,9 @@ so each reel card can be compared with it. Mark buckets that differ by ±10 pts 
 | Jewellery close-up (black lace) | SA 18.6, IR 16.2, IQ 5.9, MA 4.4, BH 4.4 | 97 % | 4 / 1 |
 | Street / group in black coats | IN 33.7, TR 8, UK 6.7, IR 6.1, PK 3.7 | 95 % | 2 / 1 |
 
-- Fred: posting from Turkey got more views in Turkey. Add a `posted_from` field (country) per reel and show it on the card.
+- Fred: all three were posted from Turkey; only one went to Turkey. So posting location is NOT the driver: the content appears to
+  pick the audience (black lace + jewellery -> Gulf/Iran; street group in black coats -> India). Keep a `posted_from` field anyway,
+  and add `visual_tags` per reel (e.g. jewellery, lace, street, POV, hair) so tags can be compared with top countries.
 - The UK share is small on every reel and followers are almost nobody. Flag a reel's top country when it's outside the target market.
 - The Instagram app DOES show per-reel country/age/gender (Audience tab). The API doesn't. Until there's a sanctioned way in,
   Fred enters it by hand: add a small "paste audience" form on the board (top 5 countries %, gender %, top age band).
